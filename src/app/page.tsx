@@ -5,6 +5,8 @@ import { Sparkles, Info, X, BookOpen, ArrowRight, CheckCircle, Plus, Play } from
 import BibleBookCard from '@/components/BibleBookCard';
 import SubscriptionBanner from '@/components/SubscriptionBanner';
 import EmailSignup from '@/components/EmailSignup';
+import Header from '@/components/Header';
+import Footer from '@/components/Footer';
 
 export default function HomePage() {
   const [showBanner, setShowBanner] = useState(true);
@@ -49,14 +51,21 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="text-center py-8">
-        <h1 className="text-4xl font-bold text-gray-900 flex items-center justify-center gap-3">
-          <Sparkles className="w-8 h-8 text-yellow-500" />
-          Relaxing Bible Reading, Soft Spoken
-          <Sparkles className="w-8 h-8 text-yellow-500" />
-        </h1>
-      </header>
+      <Header />
+      
+      {/* Hero Section */}
+      <section className="text-center py-16 bg-gradient-to-br from-purple-50 to-blue-50">
+        <div className="max-w-4xl mx-auto px-4">
+          <h1 className="text-5xl font-bold text-gray-900 flex items-center justify-center gap-3 mb-6">
+            <Sparkles className="w-10 h-10 text-yellow-500" />
+            Relaxing Bible Reading, Soft Spoken
+            <Sparkles className="w-10 h-10 text-yellow-500" />
+          </h1>
+          <p className="text-xl text-gray-600 mb-8 max-w-2xl mx-auto">
+            Experience the Bible through soothing ASMR narration. Choose your favorite reader and immerse yourself in God's Word with relaxing audio.
+          </p>
+        </div>
+      </section>
 
       {/* Subscription Banner */}
       {showBanner && (
@@ -74,6 +83,8 @@ export default function HomePage() {
 
       {/* Email Signup Section */}
       <EmailSignup />
+      
+      <Footer />
     </div>
   );
 }

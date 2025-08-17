@@ -1,6 +1,7 @@
 'use client';
 
 import { BookOpen, ArrowRight, CheckCircle, Plus, Play } from 'lucide-react';
+import Link from 'next/link';
 
 interface BibleBook {
   id: string;
@@ -70,37 +71,39 @@ export default function BibleBookCard({ book }: BibleBookCardProps) {
   };
 
   return (
-    <div className="bg-white rounded-xl shadow-lg p-6 hover:shadow-xl transition-shadow duration-300">
-      <div className="flex items-start justify-between mb-4">
-        <div className="flex-1">
-          <h3 className="text-2xl font-bold text-gray-900 mb-2">{book.title}</h3>
-          <p className="text-gray-600 text-sm leading-relaxed mb-4">{book.description}</p>
+    <Link href={`/bible/${book.id.toLowerCase()}`}>
+      <div className="bg-white rounded-xl shadow-lg p-6 hover:shadow-xl transition-shadow duration-300 cursor-pointer group">
+        <div className="flex items-start justify-between mb-4">
+          <div className="flex-1">
+            <h3 className="text-2xl font-bold text-gray-900 mb-2 group-hover:text-purple-600 transition-colors">{book.title}</h3>
+            <p className="text-gray-600 text-sm leading-relaxed mb-4">{book.description}</p>
+            
+            {renderProgress()}
+          </div>
           
-          {renderProgress()}
-        </div>
-        
-        {/* Toggle Switch */}
-        <div className="ml-4">
-          <div className={`w-12 h-6 rounded-full transition-colors duration-200 cursor-pointer ${
-            book.isSelected ? 'bg-yellow-500' : 'bg-gray-300'
-          }`}>
-            <div className={`w-5 h-5 rounded-full bg-white shadow-md transform transition-transform duration-200 ${
-              book.isSelected ? 'translate-x-6' : 'translate-x-0.5'
+          {/* Toggle Switch */}
+          <div className="ml-4">
+            <div className={`w-12 h-6 rounded-full transition-colors duration-200 cursor-pointer ${
+              book.isSelected ? 'bg-yellow-500' : 'bg-gray-300'
             }`}>
-              {book.isSelected ? (
-                <CheckCircle className="w-5 h-5 text-yellow-600" />
-              ) : (
-                <Plus className="w-5 h-5 text-gray-400" />
-              )}
+              <div className={`w-5 h-5 rounded-full bg-white shadow-md transform transition-transform duration-200 ${
+                book.isSelected ? 'translate-x-6' : 'translate-x-0.5'
+              }`}>
+                {book.isSelected ? (
+                  <CheckCircle className="w-5 h-5 text-yellow-600" />
+                ) : (
+                  <Plus className="w-5 h-5 text-gray-400" />
+                )}
+              </div>
             </div>
           </div>
         </div>
+        
+        {/* Action Button */}
+        <div className="flex justify-end">
+          {renderAction()}
+        </div>
       </div>
-      
-      {/* Action Button */}
-      <div className="flex justify-end">
-        {renderAction()}
-      </div>
-    </div>
+    </Link>
   );
 } 
