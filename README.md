@@ -1,36 +1,179 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 🎧 ASMR Bible Reading
 
-## Getting Started
+**Experience the Bible through relaxing ASMR narration**
 
-First, run the development server:
+A modern web application that combines the power of God's Word with the therapeutic benefits of ASMR (Autonomous Sensory Meridian Response) to create a unique Bible study experience.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## ✨ Features
+
+- **📖 Complete Bible Coverage**: Access to all 66 books of the Bible
+- **🎙️ Multiple Voice Options**: Choose from various ASMR narrators
+- **🧘‍♀️ Relaxation Focus**: Designed for meditation and spiritual wellness
+- **📱 Responsive Design**: Works perfectly on all devices
+- **🔍 Search & Filter**: Easy navigation through Bible books
+- **📧 Email Subscription**: Stay updated with new content
+- **💬 Interactive Features**: Notes, comments, and progress tracking
+
+## 🚀 Getting Started
+
+### Prerequisites
+
+- Node.js 18+ 
+- npm or yarn
+
+### Installation
+
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/ikramkumdin/asmrts-bible-reading.git
+   cd asmrts-bible-reading
+   ```
+
+2. **Install dependencies**
+   ```bash
+   npm install
+   ```
+
+3. **Start development server**
+   ```bash
+   npm run dev
+   ```
+
+4. **Open your browser**
+   Navigate to [http://localhost:3000](http://localhost:3000)
+
+## 🏗️ Project Structure
+
+```
+asmrts-bible/
+├── src/
+│   ├── app/                    # Next.js App Router
+│   │   ├── page.tsx           # Home page
+│   │   ├── bible/             # Bible study pages
+│   │   │   ├── page.tsx       # Bible books listing
+│   │   │   └── [book]/        # Individual book pages
+│   │   ├── voices/            # ASMR voices selection
+│   │   └── about/             # About page
+│   ├── components/            # Reusable components
+│   │   ├── Header.tsx         # Navigation header
+│   │   ├── Footer.tsx         # Site footer
+│   │   ├── BibleBookCard.tsx  # Bible book display
+│   │   ├── SubscriptionBanner.tsx # Email signup banner
+│   │   └── EmailSignup.tsx    # Email subscription form
+│   └── globals.css            # Global styles
+├── public/                    # Static assets
+├── package.json               # Dependencies
+└── README.md                  # This file
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## 🎨 Tech Stack
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- **Framework**: Next.js 14 (App Router)
+- **Language**: TypeScript
+- **Styling**: Tailwind CSS
+- **Icons**: Lucide React
+- **UI Components**: Custom components with Tailwind
+- **State Management**: React hooks (useState, useEffect)
+- **Routing**: Next.js built-in routing
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## 📱 Pages & Features
 
-## Learn More
+### 🏠 Home Page
+- Hero section with mission statement
+- Bible books grid (Genesis, Mark, Luke, John)
+- Subscription banner
+- Email signup form
 
-To learn more about Next.js, take a look at the following resources:
+### 📚 Bible Books
+- Complete listing of all Bible books
+- Search and filter functionality
+- Progress tracking for each book
+- Click to navigate to individual book study
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### 🎙️ ASMR Voices
+- Voice selection (Luna, River, Aria, Heartsease)
+- Voice specialties and ratings
+- Sample audio previews
+- Voice selection guide
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### 📖 Individual Book Study
+- Chapter-by-chapter navigation
+- Audio player with controls
+- Progress tracking
+- Note-taking functionality
+- Comments and community features
 
-## Deploy on Vercel
+### ℹ️ About Page
+- Mission statement
+- Feature highlights
+- Team information
+- Call-to-action
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## 🎯 Key Components
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### BibleBookCard
+Displays individual Bible books with:
+- Book title and description
+- Progress indicators
+- Status (completed, in-progress, free)
+- Toggle switches for selection
+- Action buttons
+
+### Header
+- Responsive navigation
+- Logo and branding
+- Mobile menu
+- Subscribe CTA button
+
+### Footer
+- Site links and information
+- Social media links
+- Legal pages
+- Newsletter signup
+
+## 🚀 Deployment
+
+### Build for Production
+```bash
+npm run build
+```
+
+### Start Production Server
+```bash
+npm start
+```
+
+### Environment Variables
+Create a `.env.local` file for any environment-specific configurations.
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- **Christian Community**: For inspiration and spiritual guidance
+- **ASMR Community**: For audio relaxation techniques
+- **Next.js Team**: For the amazing framework
+- **Tailwind CSS**: For beautiful, responsive design
+
+## 📞 Contact
+
+- **Project**: [ASMR Bible Reading](https://github.com/ikramkumdin/asmrts-bible-reading)
+- **Issues**: [GitHub Issues](https://github.com/ikramkumdin/asmrts-bible-reading/issues)
+
+## 🎉 Mission
+
+Our mission is to make Bible study accessible, enjoyable, and beneficial for your overall well-being. We believe that when you're relaxed and focused, you can better absorb and reflect on God's Word.
+
+---
+
+**Made with ❤️ for the Christian community**
