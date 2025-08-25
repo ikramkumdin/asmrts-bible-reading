@@ -15,7 +15,7 @@ export default function Footer() {
               <span className="text-xl font-bold">ASMR Bible</span>
             </div>
             <p className="text-gray-300 mb-4 max-w-md">
-              Experience the Bible through relaxing ASMR narration. Choose your favorite reader and immerse yourself in God's Word with soothing audio.
+              Experience the Bible through relaxing ASMR narration. Choose your favorite reader and immerse yourself in God&apos;s Word with soothing audio.
             </p>
             <div className="flex items-center gap-4">
               <a href="#" className="text-gray-400 hover:text-white transition-colors">

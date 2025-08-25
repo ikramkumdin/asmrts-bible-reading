@@ -12,8 +12,8 @@ export default function BibleBooksPage() {
       title: 'GENESIS',
       description: 'The Story of Jesus',
       chapters: 43,
-      status: 'completed',
-      action: 'arrow',
+      status: 'completed' as const,
+      action: 'arrow' as const,
       isSelected: true
     },
     {
@@ -21,16 +21,16 @@ export default function BibleBooksPage() {
       title: 'EXODUS',
       description: 'The story of God\'s deliverance of Israel from Egypt',
       chapters: 40,
-      status: 'free',
-      action: 'free',
+      status: 'free' as const,
+      action: 'free' as const,
       isSelected: false
     },
     {
       id: 'mark',
       title: 'MARK',
       description: 'The beginning of the gospel of Jesus Christ, the Son of God;',
-      status: 'free',
-      action: 'free',
+      status: 'free' as const,
+      action: 'free' as const,
       isSelected: false
     },
     {
@@ -39,16 +39,16 @@ export default function BibleBooksPage() {
       description: 'Forasmuch as many have taken in hand to set forth in order a declaration of those things which are most surely believed among us',
       chapters: 84,
       progress: 0,
-      status: 'in-progress',
-      action: 'resume',
+      status: 'in-progress' as const,
+      action: 'resume' as const,
       isSelected: true
     },
     {
       id: 'john',
       title: 'JOHN',
       description: 'Get the 1st sentence form chapter 1',
-      status: 'free',
-      action: 'free',
+      status: 'free' as const,
+      action: 'free' as const,
       isSelected: false
     },
     {
@@ -56,8 +56,8 @@ export default function BibleBooksPage() {
       title: 'ACTS',
       description: 'The continuing works of Jesus through His apostles',
       chapters: 28,
-      status: 'free',
-      action: 'free',
+      status: 'free' as const,
+      action: 'free' as const,
       isSelected: false
     },
     {
@@ -65,8 +65,8 @@ export default function BibleBooksPage() {
       title: 'ROMANS',
       description: 'Paul\'s letter explaining the gospel of grace',
       chapters: 16,
-      status: 'free',
-      action: 'free',
+      status: 'free' as const,
+      action: 'free' as const,
       isSelected: false
     },
     {
@@ -74,8 +74,8 @@ export default function BibleBooksPage() {
       title: 'PSALMS',
       description: 'Songs and prayers of praise, lament, and wisdom',
       chapters: 150,
-      status: 'free',
-      action: 'free',
+      status: 'free' as const,
+      action: 'free' as const,
       isSelected: false
     }
   ];

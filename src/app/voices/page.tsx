@@ -1,12 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+
 import { Headphones, Play, Heart, Star, Volume2 } from 'lucide-react';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 
 export default function VoicesPage() {
-  const [selectedVoice, setSelectedVoice] = useState('luna');
 
   const voices = [
     {
@@ -83,7 +82,6 @@ export default function VoicesPage() {
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="text-2xl font-bold text-gray-900">{voice.name}</h3>
                     <button
-                      onClick={() => setSelectedVoice(voice.id)}
                       className={`p-2 rounded-full transition-colors ${
                         voice.isFavorite 
                           ? 'text-red-500 hover:text-red-600' 
@@ -129,7 +127,7 @@ export default function VoicesPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <h4 className="text-sm font-semibold text-gray-700 mb-1">Sample Audio</h4>
-                    <p className="text-xs text-gray-500">Listen to {voice.name}'s voice</p>
+                    <p className="text-xs text-gray-500">Listen to {voice.name}&apos;s voice</p>
                   </div>
                   <button className="w-10 h-10 bg-purple-600 text-white rounded-full flex items-center justify-center hover:bg-purple-700 transition-colors">
                     <Play className="w-4 h-4 ml-1" />

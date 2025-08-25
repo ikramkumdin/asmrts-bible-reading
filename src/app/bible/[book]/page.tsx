@@ -1,20 +1,25 @@
 'use client';
 
-import { useState } from 'react';
-import { ArrowLeft, ArrowRight, Monitor, Sun, Moon, Clock, RotateCcw, MoreVertical, Edit, Trash2, ThumbsUp, ThumbsDown, MessageCircle } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { ArrowLeft, ArrowRight, Monitor, Sun, Moon, Clock, RotateCcw, MoreVertical, ThumbsUp, ThumbsDown, MessageCircle } from 'lucide-react';
 
 interface BibleStudyPageProps {
-  params: {
+  params: Promise<{
     book: string;
-  };
+  }>;
 }
 
 export default function BibleStudyPage({ params }: BibleStudyPageProps) {
+  const [book, setBook] = useState('');
   const [selectedReader, setSelectedReader] = useState('luna');
   const [emailFrequency, setEmailFrequency] = useState('daily');
   const [note, setNote] = useState('');
   const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
+
+  // Handle async params
+  useEffect(() => {
+    params.then(({ book: bookName }) => setBook(bookName));
+  }, [params]);
 
   const readers = [
     { id: 'luna', name: 'Luna', avatar: '👩‍🦰' },
@@ -39,6 +44,10 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
     }
   ];
 
+  if (!book) {
+    return <div>Loading...</div>;
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Navigation Header */}
@@ -55,7 +64,7 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
             </div>
             
             <h1 className="text-2xl font-bold text-gray-900">
-              {params.book.charAt(0).toUpperCase() + params.book.slice(1)}
+              {book.charAt(0).toUpperCase() + book.slice(1)}
               <span className="ml-3 text-sm bg-purple-100 text-purple-800 px-2 py-1 rounded-full">
                 Studying
               </span>
@@ -112,59 +121,71 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
             <div className="bg-white rounded-lg p-6 shadow-sm">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Your newsletters:</h3>
               <p className="text-gray-600 mb-3">you have subscribed this!</p>
-              <button className="text-blue-600 hover:text-blue-800 underline text-sm">
-                un-subscribed
-              </button>
-            </div>
-
-            {/* Email Frequency */}
-            <div className="bg-white rounded-lg p-6 shadow-sm">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Email frequency:</h3>
               <div className="space-y-2">
-                {['daily', 'weekly', 'never'].map((freq) => (
-                  <label key={freq} className="flex items-center gap-3 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="emailFrequency"
-                      value={freq}
-                      checked={emailFrequency === freq}
-                      onChange={(e) => setEmailFrequency(e.target.value)}
-                      className="w-4 h-4 text-blue-600"
-                    />
-                    <span className="text-gray-700 capitalize">{freq}</span>
-                  </label>
-                ))}
+                <label className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name="frequency"
+                    value="daily"
+                    checked={emailFrequency === 'daily'}
+                    onChange={(e) => setEmailFrequency(e.target.value)}
+                    className="text-purple-600"
+                  />
+                  <span className="text-sm text-gray-700">Daily</span>
+                </label>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name="frequency"
+                    value="weekly"
+                    checked={emailFrequency === 'weekly'}
+                    onChange={(e) => setEmailFrequency(e.target.value)}
+                    className="text-purple-600"
+                  />
+                  <span className="text-sm text-gray-700">Weekly</span>
+                </label>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name="frequency"
+                    value="monthly"
+                    checked={emailFrequency === 'monthly'}
+                    onChange={(e) => setEmailFrequency(e.target.value)}
+                    className="text-purple-600"
+                  />
+                  <span className="text-sm text-gray-700">Monthly</span>
+                </label>
               </div>
             </div>
           </div>
 
-          {/* Center Column - Audio Player & Content */}
-          <div className="lg:col-span-2 space-y-6">
+          {/* Center Column - Chapter Progress */}
+          <div className="space-y-6">
             {/* Chapter Progress */}
             <div className="bg-white rounded-lg p-6 shadow-sm">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Chapters</h3>
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Chapter Progress</h3>
               <div className="space-y-3">
                 {chapters.map((chapter) => (
-                  <div key={chapter.id} className="flex items-center gap-3">
-                    {chapter.status === 'completed' && (
-                      <div className="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
-                        <span className="text-white text-xs">✓</span>
+                  <div key={chapter.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                        chapter.status === 'completed' ? 'bg-green-100 text-green-800' :
+                        chapter.status === 'error' ? 'bg-red-100 text-red-800' :
+                        'bg-yellow-100 text-yellow-800'
+                      }`}>
+                        {chapter.status === 'completed' ? '✓' : 
+                         chapter.status === 'error' ? '✗' : '⏳'}
                       </div>
-                    )}
-                    {chapter.status === 'error' && (
-                      <div className="w-6 h-6 bg-yellow-500 rounded-full flex items-center justify-center">
-                        <span className="text-white text-xs">⚠</span>
-                      </div>
-                    )}
-                    {chapter.status === 'pending' && (
-                      <div className="w-6 h-6 bg-gray-300 rounded-full" />
-                    )}
-                    
-                    <span className="text-gray-900 font-medium">{chapter.title}</span>
-                    
-                    {chapter.hasError && (
-                      <span className="text-yellow-600 text-sm">Email error</span>
-                    )}
+                      <span className="font-medium text-gray-900">{chapter.title}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button className="p-2 hover:bg-gray-200 rounded-lg">
+                        <Clock className="w-4 h-4 text-gray-600" />
+                      </button>
+                      <button className="p-2 hover:bg-gray-200 rounded-lg">
+                        <RotateCcw className="w-4 h-4 text-gray-600" />
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -172,129 +193,97 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
 
             {/* Audio Player */}
             <div className="bg-white rounded-lg p-6 shadow-sm">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                Audio of {params.book.charAt(0).toUpperCase() + params.book.slice(1)} - Chapter 1
-              </h3>
-              
-              <div className="bg-gray-900 rounded-lg p-4 mb-4">
-                <div className="flex items-center gap-4">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Audio Player</h3>
+              <div className="bg-gray-100 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h4 className="font-medium text-gray-900">Chapter 1</h4>
+                    <p className="text-sm text-gray-600">00:00 / 15:30</p>
+                  </div>
                   <button
                     onClick={() => setIsPlaying(!isPlaying)}
-                    className="w-12 h-12 bg-white rounded-full flex items-center justify-center hover:bg-gray-100"
+                    className="w-12 h-12 bg-purple-600 text-white rounded-full flex items-center justify-center hover:bg-purple-700 transition-colors"
                   >
                     {isPlaying ? (
-                      <div className="w-4 h-4 bg-gray-900" />
+                      <div className="w-4 h-4 bg-white rounded-sm" />
                     ) : (
-                      <div className="w-0 h-0 border-l-[8px] border-l-gray-900 border-t-[6px] border-t-transparent border-b-[6px] border-b-transparent ml-1" />
+                      <ArrowRight className="w-5 h-5 ml-1" />
                     )}
                   </button>
-                  
-                  <div className="flex-1">
-                    <div className="w-full bg-gray-700 rounded-full h-2 mb-2">
-                      <div className="bg-white h-2 rounded-full" style={{ width: '0%' }} />
-                    </div>
-                    <div className="text-white text-sm">0:00</div>
-                  </div>
-                  
-                  <button className="w-8 h-8 text-white hover:text-gray-300">
-                    🔊
-                  </button>
-                  
-                  <button className="w-8 h-8 text-white hover:text-gray-300">
-                    ⬇️
-                  </button>
+                </div>
+                <div className="w-full bg-gray-300 rounded-full h-2">
+                  <div className="bg-purple-600 h-2 rounded-full" style={{ width: '25%' }} />
                 </div>
               </div>
-              
-              {/* Playback Controls */}
-              <div className="flex items-center gap-4">
-                <button className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg flex items-center gap-2">
-                  <span>✓</span>
-                  Mark as complete
-                </button>
-                
-                <button className="p-2 hover:bg-gray-100 rounded-lg">
-                  <Clock className="w-5 h-5" />
-                </button>
-                
-                <span className="text-gray-600">1x</span>
-                
-                <button className="p-2 hover:bg-gray-100 rounded-lg">
-                  <RotateCcw className="w-5 h-5" />
-                </button>
-              </div>
             </div>
+          </div>
 
+          {/* Right Column - Chapter Text & Notes */}
+          <div className="space-y-6">
             {/* Chapter Text */}
             <div className="bg-white rounded-lg p-6 shadow-sm">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                {params.book.charAt(0).toUpperCase() + params.book.slice(1)} - Chapter 1
-              </h3>
-              <div className="space-y-4 text-gray-700 leading-relaxed">
-                <p><span className="font-semibold">1.</span> The book of the generation of Jesus Christ, the son of David, the son of Abraham.</p>
-                <p><span className="font-semibold">2.</span> Abraham begat Isaac; and Isaac begat Jacob; and Jacob begat Judas and his brethren;</p>
-                <p><span className="font-semibold">3.</span> And Judas begat Phares and Zara of Thamar; and Phares begat Esrom; and Esrom begat Aram;</p>
-                <p><span className="font-semibold">4.</span> And Aram begat Aminadab; and Aminadab begat Naasson; and Naasson begat Salmon;</p>
-                <p><span className="font-semibold">5.</span> And Salmon begat Booz of Rachab; and Booz begat Obed of Ruth; and Obed begat Jesse;</p>
-                <p><span className="font-semibold">6.</span> And Jesse begat David the king; and David the king begat Solomon of her that had been the wife of Urias;</p>
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Chapter Text</h3>
+              <div className="prose prose-sm max-w-none">
+                <p className="text-gray-700 leading-relaxed">
+                  In the beginning God created the heaven and the earth. And the earth was without form, and void; and darkness was upon the face of the deep. And the Spirit of God moved upon the face of the waters.
+                </p>
+                <p className="text-gray-700 leading-relaxed mt-4">
+                  And God said, Let there be light: and there was light. And God saw the light, that it was good: and God divided the light from the darkness.
+                </p>
               </div>
             </div>
 
-            {/* Notes Section */}
+            {/* Notes */}
             <div className="bg-white rounded-lg p-6 shadow-sm">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">My note:</h3>
-              <div className="relative">
-                <textarea
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                  placeholder="Want writedown some notes? type here!"
-                  className="w-full h-32 p-4 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-                <button className="absolute bottom-3 right-3 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg text-sm">
-                  Comment
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Your Notes</h3>
+              <textarea
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                placeholder="Add your thoughts and insights..."
+                className="w-full h-32 p-3 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              />
+              <div className="flex items-center gap-2 mt-3">
+                <button className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm">
+                  Save Note
+                </button>
+                <button className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-sm">
+                  Clear
                 </button>
               </div>
             </div>
 
-            {/* Comments Section */}
+            {/* Comments */}
             <div className="bg-white rounded-lg p-6 shadow-sm">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Comments</h3>
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Community Comments</h3>
               <div className="space-y-4">
                 {comments.map((comment) => (
                   <div key={comment.id} className="border-b border-gray-200 pb-4 last:border-b-0">
                     <div className="flex items-start justify-between mb-2">
                       <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
+                          <span className="text-sm font-medium text-purple-800">
+                            {comment.user.charAt(0).toUpperCase()}
+                          </span>
+                        </div>
                         <span className="font-medium text-gray-900">{comment.user}</span>
                         <span className="text-sm text-gray-500">{comment.time}</span>
                       </div>
-                      <div className="relative group">
-                        <button className="p-1 hover:bg-gray-100 rounded">
-                          <MoreVertical className="w-4 h-4" />
-                        </button>
-                        <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                          <button className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2">
-                            <Edit className="w-4 h-4" />
-                            Edit
-                          </button>
-                          <button className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 text-red-600 flex items-center gap-2">
-                            <Trash2 className="w-4 h-4" />
-                            Delete
-                          </button>
-                        </div>
-                      </div>
+                      <button className="p-1 hover:bg-gray-100 rounded">
+                        <MoreVertical className="w-4 h-4 text-gray-600" />
+                      </button>
                     </div>
                     <p className="text-gray-700 mb-3">{comment.text}</p>
-                    <div className="flex items-center gap-4 text-sm text-gray-500">
-                      <button className="flex items-center gap-1 hover:text-blue-600">
+                    <div className="flex items-center gap-4 text-sm">
+                      <button className="flex items-center gap-1 text-gray-500 hover:text-blue-600">
                         <ThumbsUp className="w-4 h-4" />
                         {comment.likes}
                       </button>
-                      <button className="flex items-center gap-1 hover:text-red-600">
+                      <button className="flex items-center gap-1 text-gray-500 hover:text-red-600">
                         <ThumbsDown className="w-4 h-4" />
                       </button>
-                      <button className="flex items-center gap-1 hover:text-blue-600">
+                      <button className="flex items-center gap-1 text-gray-500 hover:text-green-600">
                         <MessageCircle className="w-4 h-4" />
-                        reply
+                        Reply
                       </button>
                     </div>
                   </div>

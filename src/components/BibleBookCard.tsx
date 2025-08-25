@@ -1,6 +1,6 @@
 'use client';
 
-import { BookOpen, ArrowRight, CheckCircle, Plus, Play } from 'lucide-react';
+import { BookOpen, ArrowRight, CheckCircle, Plus } from 'lucide-react';
 import Link from 'next/link';
 
 interface BibleBook {
@@ -50,7 +50,7 @@ export default function BibleBookCard({ book }: BibleBookCardProps) {
       );
     }
     
-    if (book.status === 'in-progress' && book.progress !== undefined) {
+    if (book.status === 'in-progress' && book.progress !== undefined && book.chapters !== undefined) {
       return (
         <div className="w-full">
           <div className="flex items-center justify-between text-sm text-gray-600 mb-2">

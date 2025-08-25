@@ -1,6 +1,6 @@
 'use client';
 
-import { Sparkles, BookOpen, Headphones, Heart } from 'lucide-react';
+import { BookOpen, Headphones, Heart } from 'lucide-react';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 
@@ -14,7 +14,7 @@ export default function AboutPage() {
         <div className="max-w-7xl mx-auto px-4 text-center">
           <h1 className="text-5xl font-bold mb-6">About ASMR Bible</h1>
           <p className="text-xl text-purple-100 max-w-3xl mx-auto">
-            We believe that experiencing God's Word should be both spiritually enriching and physically relaxing. 
+            We believe that experiencing God&apos;s Word should be both spiritually enriching and physically relaxing. 
             Our mission is to make Bible study accessible, enjoyable, and beneficial for your overall well-being.
           </p>
         </div>
@@ -25,7 +25,7 @@ export default function AboutPage() {
         <div className="max-w-4xl mx-auto px-4 text-center">
           <h2 className="text-3xl font-bold text-gray-900 mb-6">Our Mission</h2>
           <p className="text-lg text-gray-600">
-            To provide a unique Bible study experience that combines the power of God's Word with the therapeutic 
+            To provide a unique Bible study experience that combines the power of God&apos;s Word with the therapeutic 
             benefits of ASMR. We help Christians find peace, relaxation, and spiritual growth in their daily Bible reading.
           </p>
         </div>
@@ -62,12 +62,12 @@ export default function AboutPage() {
           <p className="text-xl text-purple-100 mb-8">
             Join thousands of believers who have transformed their Bible study experience.
           </p>
-          <a
-            href="/bible"
+          <button
+            onClick={() => window.location.href = '/bible'}
             className="bg-white text-purple-600 px-8 py-3 rounded-lg font-semibold hover:bg-gray-100 transition-colors"
           >
             Explore Bible Books
-          </a>
+          </button>
         </div>
       </section>
 

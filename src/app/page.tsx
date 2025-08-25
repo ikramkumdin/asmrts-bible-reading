@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Sparkles, Info, X, BookOpen, ArrowRight, CheckCircle, Plus, Play } from 'lucide-react';
+import { Sparkles } from 'lucide-react';
 import BibleBookCard from '@/components/BibleBookCard';
 import SubscriptionBanner from '@/components/SubscriptionBanner';
 import EmailSignup from '@/components/EmailSignup';
@@ -17,16 +17,16 @@ export default function HomePage() {
       title: 'GENESIS',
       description: 'The Story of Jesus',
       chapters: 43,
-      status: 'completed',
-      action: 'arrow',
+      status: 'completed' as const,
+      action: 'arrow' as const,
       isSelected: true
     },
     {
       id: 'mark',
       title: 'MARK',
       description: 'The beginning of the gospel of Jesus Christ, the Son of God;',
-      status: 'free',
-      action: 'free',
+      status: 'free' as const,
+      action: 'free' as const,
       isSelected: false
     },
     {
@@ -35,16 +35,16 @@ export default function HomePage() {
       description: 'Forasmuch as many have taken in hand to set forth in order a declaration of those things which are most surely believed among us',
       chapters: 84,
       progress: 0,
-      status: 'in-progress',
-      action: 'resume',
+      status: 'in-progress' as const,
+      action: 'resume' as const,
       isSelected: true
     },
     {
       id: 'john',
       title: 'JOHN',
       description: 'Get the 1st sentence form chapter 1',
-      status: 'free',
-      action: 'free',
+      status: 'free' as const,
+      action: 'free' as const,
       isSelected: false
     }
   ];
@@ -62,7 +62,7 @@ export default function HomePage() {
             <Sparkles className="w-10 h-10 text-yellow-500" />
           </h1>
           <p className="text-xl text-gray-600 mb-8 max-w-2xl mx-auto">
-            Experience the Bible through soothing ASMR narration. Choose your favorite reader and immerse yourself in God's Word with relaxing audio.
+            Experience the Bible through soothing ASMR narration. Choose your favorite reader and immerse yourself in God&apos;s Word with relaxing audio.
           </p>
         </div>
       </section>
