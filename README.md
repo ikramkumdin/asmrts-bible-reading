@@ -1,179 +1,135 @@
-# 🎧 ASMR Bible Reading
+# ASMRTS Bible - Audio Generation Frontend
 
-**Experience the Bible through relaxing ASMR narration**
+A beautiful frontend for generating Bible audio content using the existing ASMRTS backend infrastructure.
 
-A modern web application that combines the power of God's Word with the therapeutic benefits of ASMR (Autonomous Sensory Meridian Response) to create a unique Bible study experience.
+## 🎯 Overview
 
-## ✨ Features
+This project provides a modern, user-friendly interface for converting Bible text into high-quality audio using the existing `asmrtts_website` backend. It leverages the proven audio generation infrastructure while providing a clean, focused UI for Bible content.
 
-- **📖 Complete Bible Coverage**: Access to all 66 books of the Bible
-- **🎙️ Multiple Voice Options**: Choose from various ASMR narrators
-- **🧘‍♀️ Relaxation Focus**: Designed for meditation and spiritual wellness
-- **📱 Responsive Design**: Works perfectly on all devices
-- **🔍 Search & Filter**: Easy navigation through Bible books
-- **📧 Email Subscription**: Stay updated with new content
-- **💬 Interactive Features**: Notes, comments, and progress tracking
-
-## 🚀 Getting Started
+## 🚀 Quick Start
 
 ### Prerequisites
 
-- Node.js 18+ 
-- npm or yarn
+1. **Backend Server**: Make sure the `asmrtts_website` backend is running on port 8000
+2. **Node.js**: Version 18 or higher
 
 ### Installation
 
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/ikramkumdin/asmrts-bible-reading.git
-   cd asmrts-bible-reading
-   ```
-
-2. **Install dependencies**
-   ```bash
-   npm install
-   ```
-
-3. **Start development server**
-   ```bash
-   npm run dev
-   ```
-
-4. **Open your browser**
-   Navigate to [http://localhost:3000](http://localhost:3000)
-
-## 🏗️ Project Structure
-
-```
-asmrts-bible/
-├── src/
-│   ├── app/                    # Next.js App Router
-│   │   ├── page.tsx           # Home page
-│   │   ├── bible/             # Bible study pages
-│   │   │   ├── page.tsx       # Bible books listing
-│   │   │   └── [book]/        # Individual book pages
-│   │   ├── voices/            # ASMR voices selection
-│   │   └── about/             # About page
-│   ├── components/            # Reusable components
-│   │   ├── Header.tsx         # Navigation header
-│   │   ├── Footer.tsx         # Site footer
-│   │   ├── BibleBookCard.tsx  # Bible book display
-│   │   ├── SubscriptionBanner.tsx # Email signup banner
-│   │   └── EmailSignup.tsx    # Email subscription form
-│   └── globals.css            # Global styles
-├── public/                    # Static assets
-├── package.json               # Dependencies
-└── README.md                  # This file
-```
-
-## 🎨 Tech Stack
-
-- **Framework**: Next.js 14 (App Router)
-- **Language**: TypeScript
-- **Styling**: Tailwind CSS
-- **Icons**: Lucide React
-- **UI Components**: Custom components with Tailwind
-- **State Management**: React hooks (useState, useEffect)
-- **Routing**: Next.js built-in routing
-
-## 📱 Pages & Features
-
-### 🏠 Home Page
-- Hero section with mission statement
-- Bible books grid (Genesis, Mark, Luke, John)
-- Subscription banner
-- Email signup form
-
-### 📚 Bible Books
-- Complete listing of all Bible books
-- Search and filter functionality
-- Progress tracking for each book
-- Click to navigate to individual book study
-
-### 🎙️ ASMR Voices
-- Voice selection (Luna, River, Aria, Heartsease)
-- Voice specialties and ratings
-- Sample audio previews
-- Voice selection guide
-
-### 📖 Individual Book Study
-- Chapter-by-chapter navigation
-- Audio player with controls
-- Progress tracking
-- Note-taking functionality
-- Comments and community features
-
-### ℹ️ About Page
-- Mission statement
-- Feature highlights
-- Team information
-- Call-to-action
-
-## 🎯 Key Components
-
-### BibleBookCard
-Displays individual Bible books with:
-- Book title and description
-- Progress indicators
-- Status (completed, in-progress, free)
-- Toggle switches for selection
-- Action buttons
-
-### Header
-- Responsive navigation
-- Logo and branding
-- Mobile menu
-- Subscribe CTA button
-
-### Footer
-- Site links and information
-- Social media links
-- Legal pages
-- Newsletter signup
-
-## 🚀 Deployment
-
-### Build for Production
 ```bash
-npm run build
+# Install dependencies
+npm install
+
+# Start development server
+npm run dev
 ```
 
-### Start Production Server
-```bash
-npm start
+The application will be available at `http://localhost:3000`
+
+## 🎵 Features
+
+- **Text-to-Speech**: Convert Bible text to audio using multiple voice models
+- **Voice Selection**: Choose from Luna, River, Aria, and Heartsease voices
+- **Real-time Generation**: Instant audio generation with progress indicators
+- **Audio Playback**: Built-in audio player with download functionality
+- **Backend Integration**: Seamless connection to existing ASMRTS infrastructure
+- **Responsive Design**: Works on desktop and mobile devices
+
+## 🎨 Voice Models
+
+| Voice | Description | Best For |
+|-------|-------------|----------|
+| **Luna** | Soft, calming voice | Meditation, relaxation |
+| **River** | Smooth, flowing voice | Storytelling, narration |
+| **Aria** | Clear, melodic voice | Educational content |
+| **Heartsease** | Warm, comforting voice | Spiritual content |
+
+## 🔧 Configuration
+
+The frontend automatically connects to the backend at `http://localhost:8000`. You can customize this by setting the `NEXT_PUBLIC_BACKEND_URL` environment variable.
+
+## 📖 Usage
+
+1. **Enter Text**: Paste or type your Bible text in the text area
+2. **Choose Voice**: Select your preferred voice model
+3. **Generate**: Click "Generate Audio" to create your audio
+4. **Play & Download**: Use the built-in player or download the audio file
+
+## 🏗️ Architecture
+
+### Frontend (asmrts-bible)
+- **Next.js 15**: Modern React framework
+- **TypeScript**: Type-safe development
+- **Tailwind CSS**: Utility-first styling
+- **Axios**: HTTP client for API communication
+
+### Backend (asmrtts_website)
+- **Express.js**: Node.js web framework
+- **Firebase**: Authentication and storage
+- **TTS API**: Text-to-speech generation
+- **Queue System**: Background processing
+
+## 🔗 API Integration
+
+The frontend communicates with the backend using these endpoints:
+
+- `POST /api/audio/generate` - Generate audio immediately
+- `POST /api/audio/generate-queued` - Add to generation queue
+- `GET /api/audio/list` - List user's audio files
+- `GET /api/audio/:filePath` - Download audio file
+
+## 🚧 Development
+
+### Project Structure
+
+```
+src/
+├── app/                 # Next.js app directory
+│   ├── page.tsx         # Main page
+│   └── layout.tsx       # Root layout
+├── components/          # React components
+│   ├── AudioGenerator.tsx
+│   ├── BibleBookCard.tsx
+│   ├── Header.tsx
+│   └── Footer.tsx
+└── lib/                 # Utility libraries
+    └── audioService.ts  # Backend API integration
 ```
 
-### Environment Variables
-Create a `.env.local` file for any environment-specific configurations.
+### Adding New Features
+
+1. **New Voice Models**: Update `VOICE_PRESETS` in `audioService.ts`
+2. **UI Components**: Add new components in `components/`
+3. **API Integration**: Extend `audioService.ts` with new endpoints
+
+## 🐛 Troubleshooting
+
+### Backend Connection Issues
+
+If you see "Backend not available":
+1. Ensure `asmrtts_website` is running on port 8000
+2. Check firewall settings
+3. Verify backend health endpoint
+
+### Audio Generation Failures
+
+1. Check backend logs for detailed error messages
+2. Verify text length (should be reasonable)
+3. Ensure backend has proper API keys configured
+
+## 📄 License
+
+This project is part of the ASMRTS Bible application.
 
 ## 🤝 Contributing
 
 1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
-- **Christian Community**: For inspiration and spiritual guidance
-- **ASMR Community**: For audio relaxation techniques
-- **Next.js Team**: For the amazing framework
-- **Tailwind CSS**: For beautiful, responsive design
-
-## 📞 Contact
-
-- **Project**: [ASMR Bible Reading](https://github.com/ikramkumdin/asmrts-bible-reading)
-- **Issues**: [GitHub Issues](https://github.com/ikramkumdin/asmrts-bible-reading/issues)
-
-## 🎉 Mission
-
-Our mission is to make Bible study accessible, enjoyable, and beneficial for your overall well-being. We believe that when you're relaxed and focused, you can better absorb and reflect on God's Word.
+2. Create a feature branch
+3. Make your changes
+4. Test thoroughly
+5. Submit a pull request
 
 ---
 
-**Made with ❤️ for the Christian community**
+**Status**: Active Development  
+**Version**: 1.0.0  
+**Last Updated**: December 2024

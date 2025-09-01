@@ -1,12 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { Sparkles } from 'lucide-react';
+import { Sparkles, Volume2 } from 'lucide-react';
 import BibleBookCard from '@/components/BibleBookCard';
 import SubscriptionBanner from '@/components/SubscriptionBanner';
 import EmailSignup from '@/components/EmailSignup';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
+import AudioGenerator from '@/components/AudioGenerator';
 
 export default function HomePage() {
   const [showBanner, setShowBanner] = useState(true);
@@ -80,6 +81,22 @@ export default function HomePage() {
           ))}
         </div>
       </main>
+
+      {/* Audio Generator Section */}
+      <section className="py-16 bg-white">
+        <div className="max-w-6xl mx-auto px-4">
+          <div className="text-center mb-12">
+            <h2 className="text-4xl font-bold text-gray-900 flex items-center justify-center gap-3 mb-4">
+              <Volume2 className="w-10 h-10 text-purple-500" />
+              Audio Generation
+            </h2>
+            <p className="text-xl text-gray-600 max-w-2xl mx-auto">
+              Transform your Bible text into beautiful, relaxing audio with our advanced TTS technology.
+            </p>
+          </div>
+          <AudioGenerator />
+        </div>
+      </section>
 
       {/* Email Signup Section */}
       <EmailSignup />
