@@ -22,7 +22,7 @@ export interface AudioFile {
   userId: string;
   fileName: string;
   status: string;
-  createdAt: any;
+  createdAt: string;
   generationParams: {
     text: string;
     preset_id: string;

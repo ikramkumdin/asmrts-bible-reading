@@ -7,9 +7,10 @@ export default function AudioGenerator() {
   const [text, setText] = useState('');
   const [selectedVoice, setSelectedVoice] = useState('luna');
   const [isGenerating, setIsGenerating] = useState(false);
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<{ audioUrl: string; voice: string; duration: string; text: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [backendStatus, setBackendStatus] = useState<'checking' | 'available' | 'unavailable'>('checking');
+  const [isPlaying, setIsPlaying] = useState(false);
 
   // Check backend status on component mount
   useEffect(() => {
@@ -17,7 +18,7 @@ export default function AudioGenerator() {
       try {
         const response = await fetch('http://localhost:8000/api/audio/list');
         setBackendStatus(response.ok ? 'available' : 'unavailable');
-      } catch (error) {
+      } catch {
         setBackendStatus('unavailable');
       }
     };
@@ -61,16 +62,6 @@ export default function AudioGenerator() {
     }
   };
 
-  const handleDownload = () => {
-    if (result?.audioUrl) {
-      const link = document.createElement('a');
-      link.href = result.audioUrl;
-      link.download = `audio_${selectedVoice}_${Date.now()}.mp3`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    }
-  };
 
   return (
     <div className="max-w-4xl mx-auto p-6 bg-white rounded-xl shadow-lg">
@@ -171,18 +162,48 @@ export default function AudioGenerator() {
             </p>
             
             <div className="space-y-3">
-              <audio controls className="w-full">
-                <source src={result.audioUrl} type="audio/mpeg" />
-                Your browser does not support the audio element.
-              </audio>
+              {/* Custom Audio Player */}
+              <div className="bg-gray-800 rounded-lg p-2">
+                {/* Audio Title */}
+                <div className="text-center mb-2">
+                  <h4 className="text-white text-sm">Generated Audio</h4>
+                </div>
+                
+                {/* Audio Controls */}
+                <div className="flex items-center justify-between">
+                  {/* Play/Pause Button */}
+                  <button
+                    onClick={() => setIsPlaying(!isPlaying)}
+                    className="w-6 h-6 bg-white rounded-full flex items-center justify-center hover:bg-gray-100 transition-colors"
+                  >
+                    {isPlaying ? (
+                      <div className="flex gap-0.5">
+                        <div className="w-1 h-3 bg-gray-800"></div>
+                        <div className="w-1 h-3 bg-gray-800"></div>
+                      </div>
+                    ) : (
+                      <div className="w-0 h-0 border-l-[6px] border-l-gray-800 border-t-[4px] border-t-transparent border-b-[4px] border-b-transparent ml-0.5"></div>
+                    )}
+                  </button>
+                  
+                  {/* Current Time */}
+                  <span className="text-white text-xs font-mono ml-3">0:00</span>
+                  
+                  {/* Progress Bar */}
+                  <div className="flex-1 mx-3">
+                    <div className="w-full bg-gray-600 rounded-full h-1">
+                      <div className="bg-white h-1 rounded-full w-0 relative">
+                        <div className="absolute right-0 top-1/2 transform -translate-y-1/2 w-2 h-2 bg-white rounded-full border border-gray-600"></div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Total Time */}
+                  <span className="text-white text-xs font-mono">{result.duration}</span>
+                </div>
+              </div>
               
               <div className="flex gap-2">
-                <button
-                  onClick={handleDownload}
-                  className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm"
-                >
-                  📥 Download Audio
-                </button>
                 <button
                   onClick={() => {
                     setResult(null);
@@ -203,7 +224,7 @@ export default function AudioGenerator() {
           <ul className="text-blue-700 text-sm space-y-1">
             <li>• Enter your Bible text in the text area above</li>
             <li>• Choose your preferred voice model</li>
-            <li>• Click "Generate Audio" to create your audio</li>
+            <li>• Click &quot;Generate Audio&quot; to create your audio</li>
             <li>• Download or play the generated audio</li>
             <li>• Make sure the asmrtts_website backend is running on port 8000</li>
           </ul>

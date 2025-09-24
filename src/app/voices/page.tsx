@@ -1,17 +1,31 @@
 'use client';
 
-
-import { Headphones, Play, Heart, Star, Volume2 } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { Headphones, Play, Heart, Star, Volume2, Pause, Check } from 'lucide-react';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
+import { useRouter } from 'next/navigation';
 
 export default function VoicesPage() {
+  const router = useRouter();
+  const [selectedVoice, setSelectedVoice] = useState<string | null>(null);
+  const [favorites, setFavorites] = useState<string[]>(['luna', 'aria']);
+  const [playingAudio, setPlayingAudio] = useState<string | null>(null);
+  const audioRefs = useRef<{ [key: string]: HTMLAudioElement | null }>({});
+
+  // Load selected voice from localStorage on component mount
+  useEffect(() => {
+    const savedVoice = localStorage.getItem('selectedVoice');
+    if (savedVoice) {
+      setSelectedVoice(savedVoice);
+    }
+  }, []);
 
   const voices = [
     {
       id: 'luna',
       name: 'Luna',
-      avatar: '👩‍🦰',
+      avatar: '/presets/Preset1.jpg',
       description: 'Soft, gentle voice perfect for meditation and relaxation',
       specialties: ['Gospels', 'Psalms', 'Meditation'],
       rating: 4.9,
@@ -22,7 +36,7 @@ export default function VoicesPage() {
     {
       id: 'river',
       name: 'River',
-      avatar: '👨‍🦱',
+      avatar: '/presets/Preset2.jpg',
       description: 'Deep, calming voice ideal for storytelling and wisdom books',
       specialties: ['Genesis', 'Proverbs', 'Narratives'],
       rating: 4.8,
@@ -33,7 +47,7 @@ export default function VoicesPage() {
     {
       id: 'aria',
       name: 'Aria',
-      avatar: '👩‍🦳',
+      avatar: '/presets/Preset3.jpg',
       description: 'Clear, melodic voice perfect for poetry and letters',
       specialties: ['Psalms', 'Epistles', 'Poetry'],
       rating: 4.7,
@@ -44,7 +58,7 @@ export default function VoicesPage() {
     {
       id: 'heartsease',
       name: 'Heartsease',
-      avatar: '👨‍🦲',
+      avatar: '/presets/Preset4.jpg',
       description: 'Warm, comforting voice for healing and encouragement',
       specialties: ['Comfort', 'Healing', 'Encouragement'],
       rating: 4.9,
@@ -53,6 +67,62 @@ export default function VoicesPage() {
       sampleAudio: 'heartsease_sample.mp3'
     }
   ];
+
+  const handleVoiceSelect = (voiceId: string) => {
+    setSelectedVoice(voiceId);
+    // Store selected voice in localStorage for persistence
+    localStorage.setItem('selectedVoice', voiceId);
+    // Navigate to Bible page with selected voice
+    router.push(`/bible?voice=${voiceId}`);
+  };
+
+  const handleToggleFavorite = (voiceId: string) => {
+    setFavorites(prev => 
+      prev.includes(voiceId) 
+        ? prev.filter(id => id !== voiceId)
+        : [...prev, voiceId]
+    );
+  };
+
+  const handlePlayPreview = async (voiceId: string) => {
+    // Stop any currently playing audio
+    if (playingAudio && playingAudio !== voiceId) {
+      const currentAudio = audioRefs.current[playingAudio];
+      if (currentAudio) {
+        currentAudio.pause();
+        currentAudio.currentTime = 0;
+      }
+    }
+
+    const audioPath = `/presets/${voiceId === 'luna' ? 'Preset1' : voiceId === 'river' ? 'Preset2' : voiceId === 'aria' ? 'Preset3' : 'Preset4'}_Greeting.mp3`;
+    
+    if (playingAudio === voiceId) {
+      // If same audio is playing, pause it
+      const audio = audioRefs.current[voiceId];
+      if (audio) {
+        audio.pause();
+        setPlayingAudio(null);
+      }
+    } else {
+      // Play new audio
+      const audio = new Audio(audioPath);
+      audioRefs.current[voiceId] = audio;
+      
+      audio.onended = () => setPlayingAudio(null);
+      audio.onerror = () => {
+        console.error('Audio failed to load:', audioPath);
+        setPlayingAudio(null);
+      };
+      
+      try {
+        await audio.play();
+        setPlayingAudio(voiceId);
+      } catch (error) {
+        console.error('Failed to play audio:', error);
+        setPlayingAudio(null);
+      }
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -77,19 +147,34 @@ export default function VoicesPage() {
           {voices.map((voice) => (
             <div key={voice.id} className="bg-white rounded-xl shadow-lg p-6 hover:shadow-xl transition-shadow duration-300">
               <div className="flex items-start gap-4 mb-6">
-                <div className="text-6xl">{voice.avatar}</div>
+                <div className="w-16 h-16 rounded-full overflow-hidden">
+                  <img 
+                    src={voice.avatar} 
+                    alt={voice.name}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
                 <div className="flex-1">
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="text-2xl font-bold text-gray-900">{voice.name}</h3>
-                    <button
-                      className={`p-2 rounded-full transition-colors ${
-                        voice.isFavorite 
-                          ? 'text-red-500 hover:text-red-600' 
-                          : 'text-gray-400 hover:text-red-500'
-                      }`}
-                    >
-                      <Heart className={`w-5 h-5 ${voice.isFavorite ? 'fill-current' : ''}`} />
-                    </button>
+                    <div className="flex items-center gap-2">
+                      {selectedVoice === voice.id && (
+                        <div className="flex items-center gap-1 text-green-600 text-sm font-medium">
+                          <Check className="w-4 h-4" />
+                          Selected
+                        </div>
+                      )}
+                      <button
+                        onClick={() => handleToggleFavorite(voice.id)}
+                        className={`p-2 rounded-full transition-colors ${
+                          favorites.includes(voice.id)
+                            ? 'text-red-500 hover:text-red-600' 
+                            : 'text-gray-400 hover:text-red-500'
+                        }`}
+                      >
+                        <Heart className={`w-5 h-5 ${favorites.includes(voice.id) ? 'fill-current' : ''}`} />
+                      </button>
+                    </div>
                   </div>
                   
                   <p className="text-gray-600 mb-3">{voice.description}</p>
@@ -129,19 +214,57 @@ export default function VoicesPage() {
                     <h4 className="text-sm font-semibold text-gray-700 mb-1">Sample Audio</h4>
                     <p className="text-xs text-gray-500">Listen to {voice.name}&apos;s voice</p>
                   </div>
-                  <button className="w-10 h-10 bg-purple-600 text-white rounded-full flex items-center justify-center hover:bg-purple-700 transition-colors">
-                    <Play className="w-4 h-4 ml-1" />
+                  <button 
+                    onClick={() => handlePlayPreview(voice.id)}
+                    className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${
+                      playingAudio === voice.id 
+                        ? 'bg-red-600 hover:bg-red-700 text-white' 
+                        : 'bg-purple-600 hover:bg-purple-700 text-white'
+                    }`}
+                  >
+                    {playingAudio === voice.id ? (
+                      <Pause className="w-4 h-4" />
+                    ) : (
+                      <Play className="w-4 h-4 ml-1" />
+                    )}
                   </button>
                 </div>
               </div>
               
               {/* Action Buttons */}
               <div className="flex gap-3">
-                <button className="flex-1 bg-purple-600 text-white py-2 px-4 rounded-lg hover:bg-purple-700 transition-colors font-medium">
-                  Choose {voice.name}
+                <button 
+                  onClick={() => handleVoiceSelect(voice.id)}
+                  className={`flex-1 py-2 px-4 rounded-lg transition-colors font-medium flex items-center justify-center gap-2 ${
+                    selectedVoice === voice.id
+                      ? 'bg-green-600 text-white hover:bg-green-700'
+                      : 'bg-purple-600 text-white hover:bg-purple-700'
+                  }`}
+                >
+                  {selectedVoice === voice.id ? (
+                    <>
+                      <Check className="w-4 h-4" />
+                      Selected
+                    </>
+                  ) : (
+                    `Choose ${voice.name}`
+                  )}
                 </button>
-                <button className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
-                  Preview
+                <button 
+                  onClick={() => handlePlayPreview(voice.id)}
+                  className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2"
+                >
+                  {playingAudio === voice.id ? (
+                    <>
+                      <Pause className="w-4 h-4" />
+                      Pause
+                    </>
+                  ) : (
+                    <>
+                      <Play className="w-4 h-4" />
+                      Preview
+                    </>
+                  )}
                 </button>
               </div>
             </div>

@@ -1,84 +1,22 @@
 'use client';
 
+import { useState } from 'react';
 import { BookOpen, Search, Filter } from 'lucide-react';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import BibleBookCard from '@/components/BibleBookCard';
+import { OLD_TESTAMENT_BOOKS, NEW_TESTAMENT_BOOKS } from '@/lib/bibleData';
 
 export default function BibleBooksPage() {
-  const allBibleBooks = [
-    {
-      id: 'genesis',
-      title: 'GENESIS',
-      description: 'The Story of Jesus',
-      chapters: 43,
-      status: 'completed' as const,
-      action: 'arrow' as const,
-      isSelected: true
-    },
-    {
-      id: 'exodus',
-      title: 'EXODUS',
-      description: 'The story of God\'s deliverance of Israel from Egypt',
-      chapters: 40,
-      status: 'free' as const,
-      action: 'free' as const,
-      isSelected: false
-    },
-    {
-      id: 'mark',
-      title: 'MARK',
-      description: 'The beginning of the gospel of Jesus Christ, the Son of God;',
-      status: 'free' as const,
-      action: 'free' as const,
-      isSelected: false
-    },
-    {
-      id: 'luke',
-      title: 'LUKE',
-      description: 'Forasmuch as many have taken in hand to set forth in order a declaration of those things which are most surely believed among us',
-      chapters: 84,
-      progress: 0,
-      status: 'in-progress' as const,
-      action: 'resume' as const,
-      isSelected: true
-    },
-    {
-      id: 'john',
-      title: 'JOHN',
-      description: 'Get the 1st sentence form chapter 1',
-      status: 'free' as const,
-      action: 'free' as const,
-      isSelected: false
-    },
-    {
-      id: 'acts',
-      title: 'ACTS',
-      description: 'The continuing works of Jesus through His apostles',
-      chapters: 28,
-      status: 'free' as const,
-      action: 'free' as const,
-      isSelected: false
-    },
-    {
-      id: 'romans',
-      title: 'ROMANS',
-      description: 'Paul\'s letter explaining the gospel of grace',
-      chapters: 16,
-      status: 'free' as const,
-      action: 'free' as const,
-      isSelected: false
-    },
-    {
-      id: 'psalms',
-      title: 'PSALMS',
-      description: 'Songs and prayers of praise, lament, and wisdom',
-      chapters: 150,
-      status: 'free' as const,
-      action: 'free' as const,
-      isSelected: false
-    }
-  ];
+  const [activeTab, setActiveTab] = useState<'old' | 'new'>('old');
+  const [searchTerm, setSearchTerm] = useState('');
+
+  const currentBooks = activeTab === 'old' ? OLD_TESTAMENT_BOOKS : NEW_TESTAMENT_BOOKS;
+  
+  const filteredBooks = currentBooks.filter(book =>
+    book.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    book.description.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -97,6 +35,36 @@ export default function BibleBooksPage() {
         </div>
       </section>
 
+      {/* Testament Tabs */}
+      <section className="bg-white border-b">
+        <div className="max-w-7xl mx-auto px-4">
+          <div className="flex justify-center">
+            <div className="flex bg-gray-100 rounded-lg p-1">
+              <button
+                onClick={() => setActiveTab('old')}
+                className={`px-6 py-3 rounded-md font-medium transition-all duration-200 ${
+                  activeTab === 'old'
+                    ? 'bg-white text-purple-600 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-800'
+                }`}
+              >
+                Old Testament
+              </button>
+              <button
+                onClick={() => setActiveTab('new')}
+                className={`px-6 py-3 rounded-md font-medium transition-all duration-200 ${
+                  activeTab === 'new'
+                    ? 'bg-white text-purple-600 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-800'
+                }`}
+              >
+                New Testament
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* Search and Filters */}
       <section className="bg-white border-b">
         <div className="max-w-7xl mx-auto px-4 py-6">
@@ -105,7 +73,9 @@ export default function BibleBooksPage() {
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
               <input
                 type="text"
-                placeholder="Search Bible books..."
+                placeholder={`Search ${activeTab === 'old' ? 'Old' : 'New'} Testament books...`}
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
               />
             </div>
@@ -120,23 +90,53 @@ export default function BibleBooksPage() {
         </div>
       </section>
 
+      {/* Testament Info */}
+      <section className="bg-gray-50 py-4">
+        <div className="max-w-7xl mx-auto px-4">
+          <div className="text-center">
+            <h2 className="text-lg font-semibold text-gray-800 mb-2">
+              {activeTab === 'old' ? 'Old Testament' : 'New Testament'}
+            </h2>
+            <p className="text-gray-600">
+              {activeTab === 'old' 
+                ? 'The first 39 books of the Bible, containing the Law, History, Poetry, and Prophets'
+                : 'The last 27 books of the Bible, containing the Gospels, Acts, Epistles, and Revelation'
+              }
+            </p>
+            <p className="text-sm text-gray-500 mt-1">
+              {filteredBooks.length} books available
+            </p>
+          </div>
+        </div>
+      </section>
+
       {/* Bible Books Grid */}
       <main className="max-w-7xl mx-auto px-4 py-12">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {allBibleBooks.map((book) => (
-            <BibleBookCard key={book.id} book={book} />
-          ))}
-        </div>
+        {filteredBooks.length === 0 ? (
+          <div className="text-center py-12">
+            <BookOpen className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-gray-600 mb-2">No books found</h3>
+            <p className="text-gray-500">Try adjusting your search terms</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredBooks.map((book) => (
+              <BibleBookCard key={book.id} book={book} />
+            ))}
+          </div>
+        )}
         
         {/* Load More Button */}
-        <div className="text-center mt-12">
-          <button className="bg-purple-600 text-white px-8 py-3 rounded-lg hover:bg-purple-700 transition-colors font-medium">
-            Load More Books
-          </button>
-        </div>
+        {filteredBooks.length > 0 && (
+          <div className="text-center mt-12">
+            <button className="bg-purple-600 text-white px-8 py-3 rounded-lg hover:bg-purple-700 transition-colors font-medium">
+              Load More Books
+            </button>
+          </div>
+        )}
       </main>
 
       <Footer />
     </div>
   );
-} 
+}

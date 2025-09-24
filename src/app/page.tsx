@@ -1,54 +1,14 @@
 'use client';
 
-import { useState } from 'react';
-import { Sparkles, Volume2 } from 'lucide-react';
+import { Sparkles } from 'lucide-react';
 import BibleBookCard from '@/components/BibleBookCard';
-import SubscriptionBanner from '@/components/SubscriptionBanner';
 import EmailSignup from '@/components/EmailSignup';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
-import AudioGenerator from '@/components/AudioGenerator';
+import { getAllBooks } from '@/lib/bibleData';
 
 export default function HomePage() {
-  const [showBanner, setShowBanner] = useState(true);
-
-  const bibleBooks = [
-    {
-      id: 'genesis',
-      title: 'GENESIS',
-      description: 'The Story of Jesus',
-      chapters: 43,
-      status: 'completed' as const,
-      action: 'arrow' as const,
-      isSelected: true
-    },
-    {
-      id: 'mark',
-      title: 'MARK',
-      description: 'The beginning of the gospel of Jesus Christ, the Son of God;',
-      status: 'free' as const,
-      action: 'free' as const,
-      isSelected: false
-    },
-    {
-      id: 'luke',
-      title: 'LUKE',
-      description: 'Forasmuch as many have taken in hand to set forth in order a declaration of those things which are most surely believed among us',
-      chapters: 84,
-      progress: 0,
-      status: 'in-progress' as const,
-      action: 'resume' as const,
-      isSelected: true
-    },
-    {
-      id: 'john',
-      title: 'JOHN',
-      description: 'Get the 1st sentence form chapter 1',
-      status: 'free' as const,
-      action: 'free' as const,
-      isSelected: false
-    }
-  ];
+  const bibleBooks = getAllBooks();
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -68,11 +28,6 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Subscription Banner */}
-      {showBanner && (
-        <SubscriptionBanner onClose={() => setShowBanner(false)} />
-      )}
-
       {/* Bible Books Grid */}
       <main className="max-w-6xl mx-auto px-4 py-8">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">
@@ -81,22 +36,6 @@ export default function HomePage() {
           ))}
         </div>
       </main>
-
-      {/* Audio Generator Section */}
-      <section className="py-16 bg-white">
-        <div className="max-w-6xl mx-auto px-4">
-          <div className="text-center mb-12">
-            <h2 className="text-4xl font-bold text-gray-900 flex items-center justify-center gap-3 mb-4">
-              <Volume2 className="w-10 h-10 text-purple-500" />
-              Audio Generation
-            </h2>
-            <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-              Transform your Bible text into beautiful, relaxing audio with our advanced TTS technology.
-            </p>
-          </div>
-          <AudioGenerator />
-        </div>
-      </section>
 
       {/* Email Signup Section */}
       <EmailSignup />

@@ -1,17 +1,21 @@
 'use client';
 
 import { useState } from 'react';
-import { Menu, X, Sparkles, BookOpen, Headphones, User } from 'lucide-react';
+import { X, Sparkles, BookOpen, Headphones, AlignJustify } from 'lucide-react';
 import Link from 'next/link';
+import { useAuth } from '@/contexts/AuthContext';
+import UserProfile from '@/components/Auth/UserProfile';
+import LoginForm from '@/components/Auth/LoginForm';
 
 export default function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const { isAuthenticated, loading } = useAuth();
 
   const navigation = [
     { name: 'Home', href: '/', icon: Sparkles },
     { name: 'Bible Books', href: '/bible', icon: BookOpen },
-    { name: 'ASMR Voices', href: '/voices', icon: Headphones },
-    { name: 'Account', href: '/account', icon: User },
+    { name: 'ASMR Voices', href: '/voices', icon: Headphones }
   ];
 
   return (
@@ -43,14 +47,27 @@ export default function Header() {
             })}
           </nav>
 
-          {/* CTA Button */}
-          <div className="hidden md:block">
-            <Link
-              href="#email-signup"
-              className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors"
-            >
-              Subscribe
-            </Link>
+          {/* Auth Section */}
+          <div className="hidden md:flex items-center gap-4">
+            {isAuthenticated ? (
+              <UserProfile />
+            ) : (
+              <>
+                <button
+                  onClick={() => setShowLoginModal(true)}
+                  className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors border border-gray-300"
+                  disabled={loading}
+                >
+                  Sign In
+                </button>
+                <Link
+                  href="#email-signup"
+                  className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors"
+                >
+                  Subscribe
+                </Link>
+              </>
+            )}
           </div>
 
           {/* Mobile menu button */}
@@ -59,7 +76,7 @@ export default function Header() {
               onClick={() => setIsMenuOpen(!isMenuOpen)}
               className="p-2 text-gray-700 hover:text-purple-600"
             >
-              {isMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+              {isMenuOpen ? <X className="w-6 h-6" /> : <AlignJustify className="w-6 h-6" />}
             </button>
           </div>
         </div>
@@ -82,19 +99,53 @@ export default function Header() {
                   </Link>
                 );
               })}
-              <div className="pt-4 border-t border-gray-200">
-                <Link
-                  href="#email-signup"
-                  className="block w-full bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors text-center"
-                  onClick={() => setIsMenuOpen(false)}
-                >
-                  Subscribe
-                </Link>
+              <div className="pt-4 border-t border-gray-200 space-y-2">
+                {isAuthenticated ? (
+                  <UserProfile className="px-4" />
+                ) : (
+                  <>
+                    <button
+                      onClick={() => {
+                        setShowLoginModal(true);
+                        setIsMenuOpen(false);
+                      }}
+                      className="block w-full text-left text-gray-700 hover:text-purple-600 transition-colors px-4 py-2 rounded-lg hover:bg-gray-50"
+                      disabled={loading}
+                    >
+                      Sign In
+                    </button>
+                    <Link
+                      href="#email-signup"
+                      className="block w-full bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors text-center"
+                      onClick={() => setIsMenuOpen(false)}
+                    >
+                      Subscribe
+                    </Link>
+                  </>
+                )}
               </div>
             </nav>
           </div>
         )}
       </div>
+
+      {/* Login Modal */}
+      {showLoginModal && (
+        <div className="fixed inset-0 bg-transparent flex items-center justify-center p-4 z-50">
+          <div className="relative max-w-xl w-full">
+            <button
+              onClick={() => setShowLoginModal(false)}
+              className="absolute -top-4 -right-4 w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-xl border-2 border-gray-200 hover:bg-gray-50 z-10"
+            >
+              <X className="w-4 h-4" />
+            </button>
+            <LoginForm
+              onLoginSuccess={() => setShowLoginModal(false)}
+              className="w-full"
+            />
+          </div>
+        </div>
+      )}
     </header>
   );
 } 
