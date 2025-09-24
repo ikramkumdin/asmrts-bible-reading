@@ -22,11 +22,22 @@ const firebaseConfig = {
   measurementId: process.env.NEXT_PUBLIC_GA_TRACKING_ID,
 };
 
-// Initialize Firebase
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+// Initialize Firebase only if we have valid config and we're on the client side
+let app: ReturnType<typeof initializeApp> | null = null;
+let auth: ReturnType<typeof getAuth> | null = null;
+let db: ReturnType<typeof getFirestore> | null = null;
 
-export const auth = getAuth(app);
-export const db = getFirestore(app);
+if (typeof window !== 'undefined' && firebaseConfig.apiKey && firebaseConfig.projectId) {
+  try {
+    app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+    auth = getAuth(app);
+    db = getFirestore(app);
+  } catch (error) {
+    console.error('Firebase initialization error:', error);
+  }
+}
+
+export { auth, db };
 const provider = new GoogleAuthProvider();
 
 // Configure Google Auth Provider
@@ -42,6 +53,10 @@ export const signInWithGoogle = async (): Promise<{
   user: User;
   userTokens: number;
 }> => {
+  if (!auth || !db) {
+    throw new Error('Firebase not initialized');
+  }
+  
   try {
     // 1. Trigger Google Sign-In popup
     const result = await signInWithPopup(auth, provider);
@@ -102,6 +117,10 @@ export const signInWithGoogle = async (): Promise<{
  * Sign out the current user
  */
 export const signOutUser = async (): Promise<void> => {
+  if (!auth) {
+    throw new Error('Firebase not initialized');
+  }
+  
   try {
     await signOut(auth);
   } catch (error: unknown) {
@@ -114,6 +133,10 @@ export const signOutUser = async (): Promise<void> => {
  * Convert Firebase User to our custom User type
  */
 export const convertFirebaseUser = async (firebaseUser: FirebaseUser): Promise<User> => {
+  if (!db) {
+    throw new Error('Firebase not initialized');
+  }
+  
   const userRef = doc(db, "users", firebaseUser.uid);
   const userDoc = await getDoc(userRef);
   

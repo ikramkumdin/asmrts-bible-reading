@@ -31,6 +31,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!auth) {
+      setLoading(false);
+      return;
+    }
+    
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
       try {
         if (firebaseUser) {
@@ -52,6 +57,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   }, []);
 
   const handleSignIn = async () => {
+    if (!auth) {
+      throw new Error('Firebase not initialized');
+    }
+    
     try {
       setLoading(true);
       const { user: signedInUser } = await signInWithGoogle();
@@ -65,6 +74,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   const handleSignOut = async () => {
+    if (!auth) {
+      throw new Error('Firebase not initialized');
+    }
+    
     try {
       setLoading(true);
       await signOutUser();
