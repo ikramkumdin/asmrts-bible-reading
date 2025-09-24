@@ -28,6 +28,7 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [completedChapters, setCompletedChapters] = useState<Set<string>>(new Set());
+  const [audioLoading, setAudioLoading] = useState(false);
 
   // Handle async params
   useEffect(() => {
@@ -103,12 +104,6 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
 
   // Audio playback functions
   const playAudio = (audioPath: string, audioKey: string) => {
-    // Check if audio is available in production
-    if (!isAudioAvailable(selectedReader, book?.id || '', 1)) {
-      alert('Audio files are not available in production yet. Please use the development version for audio playback.');
-      return;
-    }
-    
     console.log('Playing audio:', audioPath, 'for key:', audioKey);
     
     // Check if this is the same audio that's currently loaded
@@ -135,9 +130,13 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
       currentAudio.currentTime = 0;
     }
 
+    // Set loading state
+    setAudioLoading(true);
+
     // Create new audio element
     const audio = new Audio(audioPath);
     audio.volume = 0.8; // Set volume to 80%
+    audio.preload = 'metadata'; // Preload metadata for faster start
     setCurrentAudio(audio);
     
     // Set playing states
@@ -156,11 +155,13 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
       console.log('Audio loaded successfully:', audioPath);
       console.log('Audio duration:', audio.duration, 'seconds');
       console.log('Audio src:', audio.src);
+      setAudioLoading(false);
     };
 
     // Add canplay event listener
     audio.oncanplay = () => {
       console.log('Audio can play:', audioPath);
+      setAudioLoading(false);
     };
 
     // Add play event listener
@@ -182,8 +183,19 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
     audio.play().catch(error => {
       console.error('Error playing audio:', error);
       console.error('Audio path attempted:', audioPath);
-      console.error('This might be due to browser autoplay policy. User interaction required.');
       setIsPlaying(false);
+      setAudioLoading(false);
+      
+      // Show user-friendly error message
+      if (error.name === 'NotAllowedError') {
+        alert('Please click the play button to start audio playback.');
+      } else if (error.name === 'NotSupportedError') {
+        alert('Audio format not supported. Please try a different browser.');
+      } else if (error.name === 'AbortError') {
+        alert('Audio loading was interrupted. Please try again.');
+      } else {
+        alert('Audio could not be played. Please check your internet connection and try again.');
+      }
     });
 
     // Handle audio end
@@ -410,7 +422,9 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
                       }}
                       title="Play full chapter"
                     >
-                      {playingChapter === `${book.id}-${chapter.id}` && isPlaying ? (
+                      {audioLoading && playingChapter === `${book.id}-${chapter.id}` ? (
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      ) : playingChapter === `${book.id}-${chapter.id}` && isPlaying ? (
                         <div className="flex gap-0.5">
                           <div className="w-1 h-4 bg-white"></div>
                           <div className="w-1 h-4 bg-white"></div>
@@ -454,7 +468,9 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
                           }}
                           className="w-8 h-8 bg-white rounded-full flex items-center justify-center hover:bg-gray-100 transition-all duration-300 shadow-md hover:shadow-lg"
                         >
-                          {playingChapter === `${book.id}-${chapter.id}` ? (
+                          {audioLoading && playingChapter === `${book.id}-${chapter.id}` ? (
+                            <div className="w-4 h-4 border-2 border-gray-800 border-t-transparent rounded-full animate-spin"></div>
+                          ) : playingChapter === `${book.id}-${chapter.id}` ? (
                             <div className="flex gap-0.5">
                               <div className="w-1.5 h-4 bg-gray-800"></div>
                               <div className="w-1.5 h-4 bg-gray-800"></div>

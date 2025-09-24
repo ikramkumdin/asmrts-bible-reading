@@ -17,11 +17,6 @@ export const getAudioBaseUrl = () => {
 };
 
 export const isAudioAvailable = (preset: string, bookId: string, chapterId: number) => {
-  // In production, we need to check if audio files are available
-  // For now, return false to show a message to users
-  if (process.env.NODE_ENV === 'production') {
-    return false;
-  }
-  
+  // Audio is available in both development and production
   return true;
 };
