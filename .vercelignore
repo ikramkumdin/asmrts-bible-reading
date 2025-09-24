@@ -1,0 +1,5 @@
+# Ignore large audio files from Vercel deployment
+public/audio/
+
+# Ignore test files
+public/test-audio.html

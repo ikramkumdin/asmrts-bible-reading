@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { ArrowLeft, ArrowRight, Clock } from 'lucide-react';
 import { getBookById, getAllBooks, type BibleBook } from '@/lib/bibleData';
 import { type VoicePreset } from '@/lib/audioUtils';
+import { isAudioAvailable } from '@/lib/audioConfig';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 
@@ -102,6 +103,12 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
 
   // Audio playback functions
   const playAudio = (audioPath: string, audioKey: string) => {
+    // Check if audio is available in production
+    if (!isAudioAvailable(selectedReader, book?.id || '', 1)) {
+      alert('Audio files are not available in production yet. Please use the development version for audio playback.');
+      return;
+    }
+    
     console.log('Playing audio:', audioPath, 'for key:', audioKey);
     
     // Check if this is the same audio that's currently loaded
