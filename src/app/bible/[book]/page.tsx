@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { ArrowLeft, ArrowRight, Clock } from 'lucide-react';
 import { getBookById, getAllBooks, type BibleBook } from '@/lib/bibleData';
 import { type VoicePreset } from '@/lib/audioUtils';
-import { isAudioAvailable } from '@/lib/audioConfig';
+import { isAudioAvailable, getAudioBaseUrl } from '@/lib/audioConfig';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 
@@ -94,11 +94,12 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
 
   // Function to get the correct audio path based on preset and audio type
   const getAudioPath = (preset: VoicePreset, bookId: string, chapterId: number, audioType: 'chapter' | 'verse', verseNumber?: number) => {
-    // All presets now use the chapter folder structure
+    const baseUrl = getAudioBaseUrl();
+    
     if (audioType === 'chapter') {
-      return `/audio/${preset}/${bookId}/chapter${chapterId}/chapter${chapterId}.mp3`;
+      return `${baseUrl}/audio/${preset}/${bookId}/chapter${chapterId}/chapter${chapterId}.mp3`;
     } else {
-      return `/audio/${preset}/${bookId}/chapter${chapterId}/${verseNumber}.mp3`;
+      return `${baseUrl}/audio/${preset}/${bookId}/chapter${chapterId}/${verseNumber}.mp3`;
     }
   };
 

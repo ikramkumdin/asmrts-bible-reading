@@ -1,0 +1,3 @@
+# Exclude large audio files from Vercel deployment
+# Audio files are now served from GCP bucket
+public/audio/

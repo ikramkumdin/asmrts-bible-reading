@@ -6,9 +6,11 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "upload-audio": "node scripts/upload-audio-to-gcp.js"
   },
   "dependencies": {
+    "@google-cloud/storage": "^7.17.1",
     "@headlessui/react": "^2.2.7",
     "@heroicons/react": "^2.2.0",
     "axios": "^1.6.0",
