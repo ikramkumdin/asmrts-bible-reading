@@ -8,7 +8,7 @@ export const getAudioBaseUrl = () => {
   // Client-side
   if (process.env.NODE_ENV === 'production') {
     // Use GCP bucket for production
-    return 'https://storage.googleapis.com/bible-audio-files-asmrts';
+    return 'https://storage.googleapis.com/asmrts-bible-audio-files';
   }
   
   // Development - use local files

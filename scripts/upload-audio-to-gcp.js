@@ -15,7 +15,7 @@ const path = require('path');
 const fs = require('fs');
 
 // Configuration
-const BUCKET_NAME = 'bible-audio-files-asmrts';
+const BUCKET_NAME = 'asmrts-bible-audio-files';
 const AUDIO_DIR = path.join(__dirname, '../public/audio');
 const DESTINATION_PREFIX = 'audio/';
 
