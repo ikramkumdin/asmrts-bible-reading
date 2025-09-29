@@ -9,7 +9,7 @@ import { useRouter } from 'next/navigation';
 export default function VoicesPage() {
   const router = useRouter();
   const [selectedVoice, setSelectedVoice] = useState<string | null>(null);
-  const [favorites, setFavorites] = useState<string[]>(['luna', 'aria']);
+  const [favorites, setFavorites] = useState<string[]>(['aria', 'heartsease']);
   const [playingAudio, setPlayingAudio] = useState<string | null>(null);
   const audioRefs = useRef<{ [key: string]: HTMLAudioElement | null }>({});
 
@@ -22,28 +22,6 @@ export default function VoicesPage() {
   }, []);
 
   const voices = [
-    {
-      id: 'luna',
-      name: 'Luna',
-      avatar: '/presets/Preset1.jpg',
-      description: 'Soft, gentle voice perfect for meditation and relaxation',
-      specialties: ['Gospels', 'Psalms', 'Meditation'],
-      rating: 4.9,
-      followers: 12450,
-      isFavorite: true,
-      sampleAudio: 'luna_sample.mp3'
-    },
-    {
-      id: 'river',
-      name: 'River',
-      avatar: '/presets/Preset2.jpg',
-      description: 'Deep, calming voice ideal for storytelling and wisdom books',
-      specialties: ['Genesis', 'Proverbs', 'Narratives'],
-      rating: 4.8,
-      followers: 9870,
-      isFavorite: false,
-      sampleAudio: 'river_sample.mp3'
-    },
     {
       id: 'aria',
       name: 'Aria',
@@ -63,7 +41,7 @@ export default function VoicesPage() {
       specialties: ['Comfort', 'Healing', 'Encouragement'],
       rating: 4.9,
       followers: 11230,
-      isFavorite: false,
+      isFavorite: true,
       sampleAudio: 'heartsease_sample.mp3'
     }
   ];
@@ -94,7 +72,7 @@ export default function VoicesPage() {
       }
     }
 
-    const audioPath = `/presets/${voiceId === 'luna' ? 'Preset1' : voiceId === 'river' ? 'Preset2' : voiceId === 'aria' ? 'Preset3' : 'Preset4'}_Greeting.mp3`;
+    const audioPath = `/presets/${voiceId === 'aria' ? 'Preset3' : 'Preset4'}_Greeting.mp3`;
     
     if (playingAudio === voiceId) {
       // If same audio is playing, pause it

@@ -1,6 +1,6 @@
 // Audio file path utilities for the ASMR Bible Reading app
 
-export type VoicePreset = 'luna' | 'river' | 'aria' | 'heartsease';
+export type VoicePreset = 'aria' | 'heartsease';
 
 /**
  * Get the audio file path for a specific chapter
@@ -53,7 +53,7 @@ export async function checkAudioFileExists(audioPath: string): Promise<boolean> 
  * @returns Array of voice preset names
  */
 export function getAvailableVoicePresets(): VoicePreset[] {
-  return ['luna', 'river', 'aria', 'heartsease'];
+  return ['aria', 'heartsease'];
 }
 
 /**
@@ -63,8 +63,6 @@ export function getAvailableVoicePresets(): VoicePreset[] {
  */
 export function getVoicePresetInfo(voicePreset: VoicePreset) {
   const presets = {
-    luna: { name: 'Luna', avatar: '/presets/Preset1.jpg' },
-    river: { name: 'River', avatar: '/presets/Preset2.jpg' },
     aria: { name: 'Aria', avatar: '/presets/Preset3.jpg' },
     heartsease: { name: 'Heartsease', avatar: '/presets/Preset4.jpg' }
   };

@@ -16,7 +16,7 @@ interface BibleStudyPageProps {
 
 export default function BibleStudyPage({ params }: BibleStudyPageProps) {
   const [book, setBook] = useState<BibleBook | null>(null);
-  const [selectedReader, setSelectedReader] = useState<VoicePreset>('luna');
+  const [selectedReader, setSelectedReader] = useState<VoicePreset>('aria');
   const [note, setNote] = useState('');
   const [isPlaying, setIsPlaying] = useState(false);
   const [expandedChapter, setExpandedChapter] = useState<number | null>(null);
@@ -229,8 +229,6 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
 
 
   const readers = [
-    { id: 'luna', name: 'Luna', avatar: '/presets/Preset1.jpg' },
-    { id: 'river', name: 'River', avatar: '/presets/Preset2.jpg' },
     { id: 'aria', name: 'Aria', avatar: '/presets/Preset3.jpg' },
     { id: 'heartsease', name: 'Heartsease', avatar: '/presets/Preset4.jpg' }
   ];
