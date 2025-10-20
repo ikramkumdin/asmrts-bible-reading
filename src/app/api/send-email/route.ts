@@ -4,6 +4,13 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { to, subject, template, data } = body;
+    
+    console.log('📧 Email API called with:', { to, subject, template });
+    console.log('📧 Environment variables check:', {
+      hasResend: !!process.env.RESEND_API_KEY,
+      hasSendGrid: !!process.env.SENDGRID_API_KEY,
+      hasSMTP: !!process.env.SMTP_HOST
+    });
 
     // For now, we'll use a simple email service
     // You can replace this with SendGrid, Mailchimp, Resend, etc.
