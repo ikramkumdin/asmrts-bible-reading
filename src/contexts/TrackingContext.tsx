@@ -2,6 +2,8 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { trackingService, type AudioProgress, type BookProgress } from '@/lib/trackingService';
+import { useAuth } from '@/contexts/AuthContext';
+import { saveUserProgress, loadUserProgress } from '@/lib/userData';
 
 interface TrackingContextType {
   // Progress tracking
@@ -36,10 +38,34 @@ interface TrackingProviderProps {
 
 export function TrackingProvider({ children }: TrackingProviderProps) {
   const [progressUpdated, setProgressUpdated] = useState(false);
+  const { user } = useAuth();
 
   const triggerProgressUpdate = () => {
     setProgressUpdated(prev => !prev);
   };
+
+  // Load Firestore progress into local tracking on sign-in
+  useEffect(() => {
+    const syncFromFirestore = async () => {
+      if (!user) return;
+      try {
+        const records = await loadUserProgress(user.uid);
+        for (const r of records) {
+          trackingService.updateProgress(r.bookId, r.chapterId, r.verseId ?? undefined, r.preset, {
+            status: r.status,
+            progress: r.progress,
+            currentTime: r.currentTime,
+            totalDuration: r.totalDuration,
+            lastPlayedAt: r.lastPlayedAt
+          });
+        }
+        triggerProgressUpdate();
+      } catch (e) {
+        console.warn('Failed to load user progress from Firestore:', e);
+      }
+    };
+    syncFromFirestore();
+  }, [user?.uid]);
 
   const contextValue: TrackingContextType = {
     // Progress tracking
@@ -51,14 +77,62 @@ export function TrackingProvider({ children }: TrackingProviderProps) {
     },
     markCompleted: (bookId, chapterId, verseId, preset) => {
       trackingService.markCompleted(bookId, chapterId, verseId, preset);
+      if (user) {
+        const progress = trackingService.getAudioProgress(bookId, chapterId, verseId, preset);
+        if (progress) {
+          saveUserProgress(user.uid, {
+            bookId,
+            chapterId,
+            verseId: verseId ?? null,
+            preset,
+            status: progress.status,
+            progress: progress.progress,
+            currentTime: progress.currentTime,
+            totalDuration: progress.totalDuration,
+            lastPlayedAt: progress.lastPlayedAt
+          }).catch(() => {});
+        }
+      }
       triggerProgressUpdate();
     },
     markInProgress: (bookId, chapterId, verseId, preset) => {
       trackingService.markInProgress(bookId, chapterId, verseId, preset);
+      if (user) {
+        const progress = trackingService.getAudioProgress(bookId, chapterId, verseId, preset);
+        if (progress) {
+          saveUserProgress(user.uid, {
+            bookId,
+            chapterId,
+            verseId: verseId ?? null,
+            preset,
+            status: progress.status,
+            progress: progress.progress,
+            currentTime: progress.currentTime,
+            totalDuration: progress.totalDuration,
+            lastPlayedAt: progress.lastPlayedAt
+          }).catch(() => {});
+        }
+      }
       triggerProgressUpdate();
     },
     updatePlaybackProgress: (bookId, chapterId, verseId, preset, currentTime, totalDuration) => {
       trackingService.updatePlaybackProgress(bookId, chapterId, verseId, preset, currentTime, totalDuration);
+      if (user) {
+        const progress = trackingService.getAudioProgress(bookId, chapterId, verseId, preset);
+        if (progress) {
+          saveUserProgress(user.uid, {
+            bookId,
+            chapterId,
+            verseId: verseId ?? null,
+            preset,
+            status: progress.status,
+            progress: progress.progress,
+            currentTime: progress.currentTime,
+            totalDuration: progress.totalDuration,
+            lastPlayedAt: progress.lastPlayedAt
+          }).catch(() => {});
+        }
+      }
       triggerProgressUpdate();
     },
     

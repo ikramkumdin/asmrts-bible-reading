@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { CheckCircle, XCircle, AlertCircle, X } from 'lucide-react';
 
 export interface Toast {
@@ -20,6 +20,13 @@ export function ToastComponent({ toast, onRemove }: ToastProps) {
   const [isVisible, setIsVisible] = useState(false);
   const [isLeaving, setIsLeaving] = useState(false);
 
+  const handleRemove = useCallback(() => {
+    setIsLeaving(true);
+    setTimeout(() => {
+      onRemove(toast.id);
+    }, 300);
+  }, [onRemove, toast.id]);
+
   useEffect(() => {
     // Animate in
     const timer = setTimeout(() => setIsVisible(true), 10);
@@ -29,19 +36,17 @@ export function ToastComponent({ toast, onRemove }: ToastProps) {
   useEffect(() => {
     // Auto remove after duration
     if (toast.duration && toast.duration > 0) {
+      console.log(`Toast ${toast.id} will auto-remove in ${toast.duration}ms`);
       const timer = setTimeout(() => {
+        console.log(`Toast ${toast.id} auto-removing now`);
         handleRemove();
       }, toast.duration);
-      return () => clearTimeout(timer);
+      return () => {
+        console.log(`Toast ${toast.id} timer cleared`);
+        clearTimeout(timer);
+      };
     }
-  }, [toast.duration]);
-
-  const handleRemove = () => {
-    setIsLeaving(true);
-    setTimeout(() => {
-      onRemove(toast.id);
-    }, 300);
-  };
+  }, [toast.duration, handleRemove]);
 
   const getIcon = () => {
     switch (toast.type) {
@@ -149,7 +154,8 @@ export function useToast() {
     const id = Math.random().toString(36).substr(2, 9);
     const newToast: Toast = {
       id,
-      duration: 5000, // Default 5 seconds
+      // Default 30 seconds unless explicitly provided
+      duration: toast.duration ?? 30000,
       ...toast
     };
     

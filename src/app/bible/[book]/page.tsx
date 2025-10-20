@@ -4,12 +4,14 @@ import { useState, useEffect } from 'react';
 import { ArrowLeft, ArrowRight, Clock } from 'lucide-react';
 import { getBookById, getAllBooks, type BibleBook } from '@/lib/bibleData';
 import { type VoicePreset } from '@/lib/audioUtils';
-import { isAudioAvailable, getAudioBaseUrl } from '@/lib/audioConfig';
+import { getAudioBaseUrl } from '@/lib/audioConfig';
 import { useTracking } from '@/contexts/TrackingContext';
 import { useToastContext } from '@/components/ToastProvider';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { getAudioDuration, type AudioDuration } from '@/lib/audioDuration';
 import { trackAudioPlay, trackAudioComplete, trackChapterComplete, trackBookSelect, trackPresetSelect } from '@/lib/firebaseConfig';
+import { useAuth } from '@/contexts/AuthContext';
+import { saveUserNote, deleteUserNote, loadUserNotes } from '@/lib/userData';
 import SimplePlayButton from '@/components/SimplePlayButton';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
@@ -43,7 +45,6 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
   // Tracking and toast hooks
   const { 
     getCompletionStatus, 
-    isAudioAvailable, 
     markInProgress, 
     markCompleted, 
     updatePlaybackProgress,
@@ -52,16 +53,24 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
     resetBookProgress
   } = useTracking();
   const { showSuccess, showError, showWarning, showInfo } = useToastContext();
+  const { user } = useAuth();
 
-  // Load saved notes on component mount
+  // Load saved notes from Firestore on book/user change; fallback to localStorage if not signed in
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem(`asmrts_notes_${book?.id}`);
-      if (saved) {
-        setSavedNotes(JSON.parse(saved));
+    const loadNotes = async () => {
+      if (!book) return;
+      if (user) {
+        const notes = await loadUserNotes(user.uid, book.id);
+        const mapped: Record<string, string> = {};
+        notes.forEach(n => { mapped[n.id] = n.text; });
+        setSavedNotes(mapped);
+      } else if (typeof window !== 'undefined') {
+        const saved = localStorage.getItem(`asmrts_notes_${book.id}`);
+        if (saved) setSavedNotes(JSON.parse(saved));
       }
-    }
-  }, [book?.id]);
+    };
+    loadNotes();
+  }, [book?.id, user?.uid]);
 
   // Force re-render when progress updates
   useEffect(() => {
@@ -154,17 +163,54 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
     }
   };
 
+  // Ensure the URL exists before attempting to play; if verse is missing, fall back to chapter audio
+  const ensureAndPlay = async (
+    preset: VoicePreset,
+    bookId: string,
+    chapterId: number,
+    type: 'chapter' | 'verse',
+    verseNumber?: number
+  ) => {
+    const primaryPath = getAudioPath(preset, bookId, chapterId, type, verseNumber);
+    try {
+      const headResp = await fetch(primaryPath, { method: 'HEAD' });
+      if (headResp.ok) {
+        const key = type === 'chapter' ? `${bookId}-${chapterId}` : `${bookId}-${chapterId}-${verseNumber}`;
+        playAudio(primaryPath, key);
+        return;
+      }
+    } catch (_) {
+      // ignore and try fallback below
+    }
+
+    if (type === 'verse') {
+      const chapterPath = getAudioPath(preset, bookId, chapterId, 'chapter');
+      try {
+        const headChapter = await fetch(chapterPath, { method: 'HEAD' });
+        if (headChapter.ok) {
+          playAudio(chapterPath, `${bookId}-${chapterId}`);
+          showInfo('Verse audio unavailable', 'Playing full chapter audio instead.');
+          return;
+        }
+      } catch (_) {
+        // fall through to warning
+      }
+    }
+
+    showWarning('Audio Not Available', `Audio for ${bookId} Chapter ${chapterId}${type === 'verse' && verseNumber ? ` Verse ${verseNumber}` : ''} is not available yet.`);
+  };
+
   // Audio playback functions
   const playAudio = (audioPath: string, audioKey: string) => {
     
     // Check if audio is available
     const [bookId, chapterId, verseId] = audioKey.split('-');
-    const isAvailable = isAudioAvailable(bookId, parseInt(chapterId), selectedReader);
+    const isAvailable = bookId === 'genesis' && parseInt(chapterId) >= 1 && parseInt(chapterId) <= 24;
     
     if (!isAvailable) {
       showWarning(
         'Audio Not Available',
-        `Audio for ${bookId} Chapter ${chapterId}${verseId ? ` Verse ${verseId}` : ''} is not available yet. Only Genesis chapters 1-12 have audio available. Please try a different chapter.`
+        `Audio for ${bookId} Chapter ${chapterId}${verseId ? ` Verse ${verseId}` : ''} is not available yet.`
       );
       return;
     }
@@ -196,8 +242,10 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
     // Set loading state
     setAudioLoading(true);
 
-    // Create new audio element
-    const audio = new Audio(audioPath);
+    // Create new audio element with proper CORS for cross-origin streaming
+    const audio = new Audio();
+    audio.crossOrigin = 'anonymous';
+    audio.src = audioPath;
     audio.volume = 0.8; // Set volume to 80%
     audio.preload = 'metadata'; // Preload metadata for faster start
     setCurrentAudio(audio);
@@ -281,12 +329,39 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
       setIsPlaying(false);
       setAudioLoading(false);
       
-      // Show user-friendly error message
-      if (error.name === 'NotAllowedError') {
+      // Fallback for quirky browsers: fetch as blob and play via Object URL
+      const tryBlobFallback = async () => {
+        try {
+          setAudioLoading(true);
+          const response = await fetch(audioPath, { mode: 'cors', credentials: 'omit' });
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const blob = await response.blob();
+          const objectUrl = URL.createObjectURL(blob);
+          audio.src = objectUrl;
+          await audio.play();
+          setIsPlaying(true);
+          setAudioLoading(false);
+        } catch (fallbackErr) {
+          console.error('Blob fallback failed:', fallbackErr);
+          // Show user-friendly error message
+          if ((error as Error).name === 'NotAllowedError') {
+            alert('Please click the play button to start audio playback.');
+          } else if ((error as Error).name === 'NotSupportedError') {
+            alert('Audio format not supported. Please try a different browser.');
+          } else if ((error as Error).name === 'AbortError') {
+            alert('Audio loading was interrupted. Please try again.');
+          } else {
+            alert('Audio could not be played. Please check your internet connection and try again.');
+          }
+        }
+      };
+
+      // Only attempt blob fallback for format/support errors
+      if ((error as Error).name === 'NotSupportedError') {
+        tryBlobFallback();
+      } else if ((error as Error).name === 'NotAllowedError') {
         alert('Please click the play button to start audio playback.');
-      } else if (error.name === 'NotSupportedError') {
-        alert('Audio format not supported. Please try a different browser.');
-      } else if (error.name === 'AbortError') {
+      } else if ((error as Error).name === 'AbortError') {
         alert('Audio loading was interrupted. Please try again.');
       } else {
         alert('Audio could not be played. Please check your internet connection and try again.');
@@ -353,9 +428,15 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
   // Save note function
   const saveNote = () => {
     if (note.trim() && book) {
-      const newNotes = { ...savedNotes, [Date.now().toString()]: note.trim() };
+      const id = Date.now().toString();
+      const text = note.trim();
+      const newNotes = { ...savedNotes, [id]: text };
       setSavedNotes(newNotes);
-      localStorage.setItem(`asmrts_notes_${book.id}`, JSON.stringify(newNotes));
+      if (user) {
+        saveUserNote(user.uid, book.id, id, text).catch(() => {});
+      } else if (typeof window !== 'undefined') {
+        localStorage.setItem(`asmrts_notes_${book.id}`, JSON.stringify(newNotes));
+      }
       setNote('');
       showSuccess('Note Saved!', 'Your note has been saved successfully.');
     }
@@ -368,13 +449,14 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
 
   // Load exact durations for available chapters
   const loadExactDurations = async (bookId: string, preset: string) => {
-    if (!isAudioAvailable(bookId, 1, preset)) return; // Only load if book has audio
+    // Only load if book has audio
+    if (!(bookId === 'genesis')) return;
     
     const durations = new Map<string, string>();
     
-    // Load durations for Genesis chapters 1-12 (only available chapters)
-    for (let chapterId = 1; chapterId <= 12; chapterId++) {
-      if (isAudioAvailable(bookId, chapterId, preset)) {
+    // Load durations for Genesis chapters 1-24 (available in GCP)
+    for (let chapterId = 1; chapterId <= 24; chapterId++) {
+      if (bookId === 'genesis') {
         try {
           const duration = await getAudioDuration(bookId, chapterId, preset);
           if (duration) {
@@ -417,7 +499,7 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
 
   return (
     <ProtectedRoute>
-      <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50">
         <Header />
       
       {/* Navigation Header */}
@@ -445,7 +527,7 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
             </div>
             
             <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold text-gray-900">
+            <h1 className="text-2xl font-bold text-gray-900">
                 {book.title}
               </h1>
               <span className="text-sm bg-purple-100 text-purple-800 px-3 py-1 rounded-full font-medium">
@@ -556,7 +638,7 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
                 ))}
               </div>
             </div>
-          </div>
+              </div>
 
           {/* Filter Results Count */}
           <div className="mb-4 text-sm text-gray-600">
@@ -613,7 +695,7 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
                         {chapter.title}
                       </h3>
                       <div className="flex items-center gap-4 text-sm text-gray-600">
-                        {isAudioAvailable(book.id, chapter.id, selectedReader) && (
+                        {(book.id === 'genesis' && chapter.id >= 1 && chapter.id <= 24) && (
                           <span className="flex items-center gap-1">
                             <Clock className="w-4 h-4" />
                             {exactDurations.get(`${book.id}-${chapter.id}`) || chapter.duration}
@@ -622,7 +704,7 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
                         <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                           (() => {
                             const trackingStatus = getCompletionStatus(book.id, chapter.id, selectedReader);
-                            const hasAudio = isAudioAvailable(book.id, chapter.id, selectedReader);
+                            const hasAudio = (book.id === 'genesis' && chapter.id >= 1 && chapter.id <= 24);
                             
                             if (trackingStatus.status === 'completed') return 'bg-green-100 text-green-800';
                             if (trackingStatus.status === 'in-progress') return 'bg-yellow-100 text-yellow-800';
@@ -633,7 +715,7 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
                         }`}>
                           {(() => {
                             const trackingStatus = getCompletionStatus(book.id, chapter.id, selectedReader);
-                            const hasAudio = isAudioAvailable(book.id, chapter.id, selectedReader);
+                            const hasAudio = (book.id === 'genesis' && chapter.id >= 1 && chapter.id <= 24);
                             
                             if (trackingStatus.status === 'completed') return '✓ Completed';
                             if (trackingStatus.status === 'in-progress') return '⏳ In Progress';
@@ -688,8 +770,8 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
                         return null;
                       })()}
                     </div>
-                  </div>
-                  <div className="flex items-center gap-2">
+                    </div>
+                    <div className="flex items-center gap-2">
                     <div onClick={(e) => e.stopPropagation()}>
                       {(() => {
                         const chapterKey = `${book.id}-${chapter.id}`;
@@ -709,23 +791,22 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
                         onPlay={() => {
                           const chapterKey = `${book.id}-${chapter.id}`;
                           
-                          if (!isAudioAvailable(book.id, chapter.id, selectedReader)) {
+                          if (!(book.id === 'genesis' && chapter.id >= 1 && chapter.id <= 24)) {
                             showWarning(
                               'Audio Not Available',
-                              `Audio for ${book.id} Chapter ${chapter.id} is not available yet. Only Genesis chapters 1-12 have audio available.`
+                              `Audio for ${book.id} Chapter ${chapter.id} is not available yet.`
                             );
                             return;
                           }
                           
-                          const audioPath = getAudioPath(selectedReader, book.id, chapter.id, 'chapter');
-                          playAudio(audioPath, chapterKey);
+                          ensureAndPlay(selectedReader, book.id, chapter.id, 'chapter');
                         }}
                         onPause={() => {
                           const chapterKey = `${book.id}-${chapter.id}`;
                           stopAudio();
                         }}
                         className={`${
-                          !isAudioAvailable(book.id, chapter.id, selectedReader)
+                          !(book.id === 'genesis' && chapter.id >= 1 && chapter.id <= 24)
                             ? 'opacity-50 cursor-not-allowed'
                             : ''
                         }`}
@@ -781,12 +862,12 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
                         </div>
                         
                         {/* Duration */}
-                        {isAudioAvailable(book.id, chapter.id, selectedReader) && (
+                        {(book.id === 'genesis' && chapter.id >= 1 && chapter.id <= 24) && (
                           <span className="text-white text-xs font-mono">{exactDurations.get(`${book.id}-${chapter.id}`) || chapter.duration}</span>
                         )}
-                      </div>
-                    </div>
-                    
+              </div>
+            </div>
+
 
                     {/* Mark as Complete Button - Only show after audio finishes */}
                     {(() => {
@@ -845,8 +926,8 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
                     
                     <div className="space-y-3">
                       {chapter.text.split('\n').filter(line => line.trim()).map((verse, index) => {
-                        const verseKey = `${book.id}-${chapter.id}-${index}`;
                         const verseNumber = verse.match(/^(\d+)/)?.[1] || (index + 1).toString();
+                        const verseKey = `${book.id}-${chapter.id}-${verseNumber}`;
                         const verseText = verse.replace(/^\d+\s*/, '');
                         
                         return (
@@ -867,12 +948,12 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
                                   : 'bg-gray-100 text-gray-600 group-hover:bg-purple-100 group-hover:text-purple-700'
                               }`}>
                                 {verseNumber || index + 1}
-                              </div>
+                </div>
                               
                               {/* Verse Text */}
                               <div className="flex-1">
                                 <p className="text-gray-700 leading-relaxed">{verseText}</p>
-                              </div>
+                </div>
                               
                               {/* Audio Controls */}
                               <div className={`flex-shrink-0 transition-all duration-300 ${
@@ -884,9 +965,7 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
                                     isPlaying={playingVerse === verseKey && isPlaying}
                                     onPlay={() => {
                                       // Individual verse audio files (1.mp3, 2.mp3, etc.)
-                                      const audioPath = getAudioPath(selectedReader, book.id, chapter.id, 'verse', parseInt(verseNumber));
-                                      console.log(`Verse button clicked for Chapter ${chapter.id} - playing:`, audioPath);
-                                      playAudio(audioPath, verseKey);
+                                      ensureAndPlay(selectedReader, book.id, chapter.id, 'verse', parseInt(verseNumber));
                                     }}
                                     onPause={() => {
                                       stopAudio();
@@ -897,10 +976,10 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
                                         : 'bg-gray-200 text-gray-600 hover:bg-purple-200 hover:text-purple-700'
                                     }`}
                                   />
-                                </div>
-                              </div>
-                            </div>
-                            
+              </div>
+            </div>
+          </div>
+
                             {/* Playing Indicator */}
                             {playingVerse === verseKey && (
                               <div className="absolute -left-1 top-1/2 transform -translate-y-1/2 w-2 h-8 bg-gradient-to-b from-purple-500 to-blue-500 rounded-r-full animate-pulse"></div>
@@ -910,12 +989,12 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
                       })}
                     </div>
                   </div>
-                </div>
+              </div>
               )}
 
             </div>
           ))}
-          </div>
+            </div>
 
           {/* Notes Section - At the end of all chapters */}
           <div className="mt-6 bg-white rounded-lg shadow-sm border border-gray-200">
@@ -941,8 +1020,8 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
                   Clear
                 </button>
               </div>
+              </div>
             </div>
-          </div>
 
           {/* Saved Notes Display */}
           {Object.keys(savedNotes).length > 0 && (
@@ -967,7 +1046,11 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
                               delete newNotes[timestamp];
                               setSavedNotes(newNotes);
                               if (book) {
-                                localStorage.setItem(`asmrts_notes_${book.id}`, JSON.stringify(newNotes));
+                                if (user) {
+                                  deleteUserNote(user.uid, book.id, timestamp).catch(() => {});
+                                } else if (typeof window !== 'undefined') {
+                                  localStorage.setItem(`asmrts_notes_${book.id}`, JSON.stringify(newNotes));
+                                }
                               }
                             }}
                             className="text-red-500 hover:text-red-700 text-xs"
@@ -978,7 +1061,7 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
                         <p className="text-gray-700 text-sm">{noteText}</p>
                       </div>
                     ))}
-                </div>
+                  </div>
               </div>
             </div>
           )}
@@ -987,7 +1070,7 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
       </main>
       
         <Footer />
-      </div>
+    </div>
     </ProtectedRoute>
   );
 } 

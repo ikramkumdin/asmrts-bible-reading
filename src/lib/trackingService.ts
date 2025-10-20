@@ -394,23 +394,14 @@ class TrackingService {
 
   // Check if audio is available based on file structure
   isAudioAvailable(bookId: string, chapterId: number, preset: string): boolean {
-    // Based on the project structure, audio files are organized as:
-    // /public/audio/{preset}/{bookId}/chapter{chapterId}/
+    // Genesis chapters 1-24 are now available for both presets (GCP bucket)
+    if (bookId === 'genesis' && chapterId >= 1 && chapterId <= 24) {
+      console.log(`Audio check: ${bookId} Chapter ${chapterId} with ${preset} = Available`);
+      return true;
+    }
     
-    // Only Genesis chapters 1-12 have audio available for both presets
-    const availableAudio: Record<string, Record<string, number[]>> = {
-      'aria': {
-        'genesis': [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
-        // No other books have audio yet
-      },
-      'heartsease': {
-        'genesis': [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
-        // No other books have audio yet
-      }
-    };
-
-    // Check if this specific book, chapter, and preset combination has audio
-    const hasAudio = availableAudio[preset]?.[bookId]?.includes(chapterId) || false;
+    // Fallback: mark others as unavailable for now
+    const hasAudio = false;
     
     console.log(`Audio check: ${bookId} Chapter ${chapterId} with ${preset} = ${hasAudio ? 'Available' : 'Not Available'}`);
     
