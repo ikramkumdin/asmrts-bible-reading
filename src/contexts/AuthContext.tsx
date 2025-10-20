@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
-import { auth, convertFirebaseUser, signInWithGoogle, signOutUser, User } from '@/lib/firebaseConfig';
+import { auth, convertFirebaseUser, signInWithGoogle, signOutUser, User, trackSignup, trackLogin } from '@/lib/firebaseConfig';
 
 interface AuthContextType {
   user: User | null;
@@ -42,6 +42,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           // Convert Firebase user to our custom User type
           const customUser = await convertFirebaseUser(firebaseUser);
           setUser(customUser);
+          
+          // Track login event
+          trackLogin('google');
         } else {
           setUser(null);
         }

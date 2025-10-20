@@ -2,7 +2,8 @@
 
 import { BookOpen, ArrowRight, CheckCircle, Plus, X } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { useState } from 'react';
+import { useTracking } from '@/contexts/TrackingContext';
+import { useState, useEffect } from 'react';
 import LoginForm from '@/components/Auth/LoginForm';
 import Link from 'next/link';
 
@@ -23,7 +24,16 @@ interface BibleBookCardProps {
 
 export default function BibleBookCard({ book }: BibleBookCardProps) {
   const { isAuthenticated } = useAuth();
+  const { getBookProgress } = useTracking();
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const [isClient, setIsClient] = useState(false);
+  
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+  
+  // Get book progress from tracking system
+  const bookProgress = isClient ? getBookProgress(book.id) : null;
 
   const handleCardClick = (e: React.MouseEvent) => {
     if (!isAuthenticated) {
@@ -54,32 +64,7 @@ export default function BibleBookCard({ book }: BibleBookCardProps) {
   };
 
   const renderProgress = () => {
-    if (book.status === 'completed') {
-      return (
-        <div className="flex items-center gap-2 text-gray-600">
-          <BookOpen className="w-4 h-4" />
-          <span>{book.chapters} chapters</span>
-        </div>
-      );
-    }
-    
-    if (book.status === 'in-progress' && book.progress !== undefined && book.chapters !== undefined) {
-      return (
-        <div className="w-full">
-          <div className="flex items-center justify-between text-sm text-gray-600 mb-2">
-            <span>Progress</span>
-            <span>{book.progress}/{book.chapters} chapters</span>
-          </div>
-          <div className="w-full bg-gray-200 rounded-full h-2">
-            <div 
-              className="bg-blue-500 h-2 rounded-full transition-all duration-300"
-              style={{ width: `${(book.progress / book.chapters) * 100}%` }}
-            />
-          </div>
-        </div>
-      );
-    }
-    
+    // Always show basic chapter count to avoid hydration issues
     return (
       <div className="flex items-center gap-2 text-gray-600">
         <BookOpen className="w-4 h-4" />

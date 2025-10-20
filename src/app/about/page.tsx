@@ -1,13 +1,15 @@
 'use client';
 
 import { BookOpen, Headphones, Heart } from 'lucide-react';
+import ProtectedRoute from '@/components/ProtectedRoute';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 
 export default function AboutPage() {
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Header />
+    <ProtectedRoute>
+      <div className="min-h-screen bg-gray-50">
+        <Header />
       
       {/* Hero Section */}
       <section className="bg-gradient-to-br from-purple-600 to-blue-600 text-white py-20">
@@ -71,7 +73,8 @@ export default function AboutPage() {
         </div>
       </section>
 
-      <Footer />
-    </div>
+        <Footer />
+      </div>
+    </ProtectedRoute>
   );
 } 

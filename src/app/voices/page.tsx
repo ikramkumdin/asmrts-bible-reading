@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { Headphones, Play, Heart, Star, Volume2, Pause, Check } from 'lucide-react';
+import ProtectedRoute from '@/components/ProtectedRoute';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import { useRouter } from 'next/navigation';
@@ -103,8 +104,9 @@ export default function VoicesPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Header />
+    <ProtectedRoute>
+      <div className="min-h-screen bg-gray-50">
+        <Header />
       
       {/* Page Header */}
       <section className="bg-gradient-to-r from-blue-600 to-purple-600 text-white py-16">
@@ -278,7 +280,8 @@ export default function VoicesPage() {
         </div>
       </main>
 
-      <Footer />
-    </div>
+        <Footer />
+      </div>
+    </ProtectedRoute>
   );
 } 

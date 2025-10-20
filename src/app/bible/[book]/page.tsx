@@ -5,6 +5,12 @@ import { ArrowLeft, ArrowRight, Clock } from 'lucide-react';
 import { getBookById, getAllBooks, type BibleBook } from '@/lib/bibleData';
 import { type VoicePreset } from '@/lib/audioUtils';
 import { isAudioAvailable, getAudioBaseUrl } from '@/lib/audioConfig';
+import { useTracking } from '@/contexts/TrackingContext';
+import { useToastContext } from '@/components/ToastProvider';
+import ProtectedRoute from '@/components/ProtectedRoute';
+import { getAudioDuration, type AudioDuration } from '@/lib/audioDuration';
+import { trackAudioPlay, trackAudioComplete, trackChapterComplete, trackBookSelect, trackPresetSelect } from '@/lib/firebaseConfig';
+import SimplePlayButton from '@/components/SimplePlayButton';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 
@@ -18,6 +24,7 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
   const [book, setBook] = useState<BibleBook | null>(null);
   const [selectedReader, setSelectedReader] = useState<VoicePreset>('aria');
   const [note, setNote] = useState('');
+  const [savedNotes, setSavedNotes] = useState<Record<string, string>>({});
   const [isPlaying, setIsPlaying] = useState(false);
   const [expandedChapter, setExpandedChapter] = useState<number | null>(null);
   const [playingChapter, setPlayingChapter] = useState<string | null>(null);
@@ -29,6 +36,45 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
   const [duration, setDuration] = useState(0);
   const [completedChapters, setCompletedChapters] = useState<Set<string>>(new Set());
   const [audioLoading, setAudioLoading] = useState(false);
+  const [chapterFilter, setChapterFilter] = useState<'all' | 'completed' | 'in-progress'>('all');
+  const [audioFinishedChapters, setAudioFinishedChapters] = useState<Set<string>>(new Set());
+  const [exactDurations, setExactDurations] = useState<Map<string, string>>(new Map());
+
+  // Tracking and toast hooks
+  const { 
+    getCompletionStatus, 
+    isAudioAvailable, 
+    markInProgress, 
+    markCompleted, 
+    updatePlaybackProgress,
+    progressUpdated,
+    getBookProgress,
+    resetBookProgress
+  } = useTracking();
+  const { showSuccess, showError, showWarning, showInfo } = useToastContext();
+
+  // Load saved notes on component mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem(`asmrts_notes_${book?.id}`);
+      if (saved) {
+        setSavedNotes(JSON.parse(saved));
+      }
+    }
+  }, [book?.id]);
+
+  // Force re-render when progress updates
+  useEffect(() => {
+    // This will trigger a re-render when progress is updated
+  }, [progressUpdated]);
+
+  // Load exact durations when book or preset changes
+  useEffect(() => {
+    if (book && selectedReader) {
+      loadExactDurations(book.id, selectedReader);
+    }
+  }, [book?.id, selectedReader]);
+
 
   // Handle async params
   useEffect(() => {
@@ -36,6 +82,11 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
     params.then(({ book: bookName }) => {
       const bookData = getBookById(bookName);
       setBook(bookData || null);
+      
+      // Track book selection
+      if (bookData) {
+        trackBookSelect(bookData.id, bookData.title);
+      }
       
       // Find current book index for navigation
       const allBooks = getAllBooks();
@@ -105,7 +156,18 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
 
   // Audio playback functions
   const playAudio = (audioPath: string, audioKey: string) => {
-    console.log('Playing audio:', audioPath, 'for key:', audioKey);
+    
+    // Check if audio is available
+    const [bookId, chapterId, verseId] = audioKey.split('-');
+    const isAvailable = isAudioAvailable(bookId, parseInt(chapterId), selectedReader);
+    
+    if (!isAvailable) {
+      showWarning(
+        'Audio Not Available',
+        `Audio for ${bookId} Chapter ${chapterId}${verseId ? ` Verse ${verseId}` : ''} is not available yet. Only Genesis chapters 1-12 have audio available. Please try a different chapter.`
+      );
+      return;
+    }
     
     // Check if this is the same audio that's currently loaded
     const isSameAudio = (playingChapter === audioKey || playingVerse === audioKey);
@@ -142,14 +204,26 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
     
     // Set playing states
     if (audioKey.includes('chapter')) {
+      console.log('🎵 Setting playingChapter to:', audioKey);
       setPlayingChapter(audioKey);
       setPlayingVerse(null);
+      // Mark chapter as in progress
+      markInProgress(bookId, parseInt(chapterId), undefined, selectedReader);
+      
+      // Track audio play event
+      trackAudioPlay(bookId, parseInt(chapterId), selectedReader, 'chapter');
     } else {
+      console.log('🎵 Setting playingVerse to:', audioKey);
       setPlayingVerse(audioKey);
       setPlayingChapter(null);
+      // Mark verse as in progress
+      markInProgress(bookId, parseInt(chapterId), parseInt(verseId), selectedReader);
+      
+      // Track audio play event
+      trackAudioPlay(bookId, parseInt(chapterId), selectedReader, 'verse', parseInt(verseId));
     }
     
-    setIsPlaying(true);
+    // Note: isPlaying will be set to true when audio.play() promise resolves
 
     // Add load event listener
     audio.onloadeddata = () => {
@@ -167,12 +241,28 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
 
     // Add play event listener
     audio.onplay = () => {
-      console.log('🎵 AUDIO IS NOW PLAYING:', audioPath);
+      console.log('🎵 Audio onplay event fired for:', audioKey);
+      setIsPlaying(true);
+      if (audioKey.includes('chapter')) {
+        console.log('🎵 Setting playingChapter to:', audioKey);
+        setPlayingChapter(audioKey);
+      }
+      console.log('🎵 After onplay - isPlaying should be true, playingChapter:', audioKey);
     };
 
     // Add time update listener for progress
     audio.ontimeupdate = () => {
       setCurrentTime(audio.currentTime);
+      // Update tracking progress
+      const [bookId, chapterId, verseId] = audioKey.split('-');
+      updatePlaybackProgress(
+        bookId, 
+        parseInt(chapterId), 
+        verseId ? parseInt(verseId) : undefined, 
+        selectedReader, 
+        audio.currentTime, 
+        audio.duration
+      );
     };
 
     // Add loaded metadata listener
@@ -181,7 +271,11 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
     };
 
     // Play audio
-    audio.play().catch(error => {
+    audio.play().then(() => {
+      console.log('🎵 Audio.play() promise resolved - setting isPlaying to TRUE');
+      setIsPlaying(true);
+      setAudioLoading(false);
+    }).catch(error => {
       console.error('Error playing audio:', error);
       console.error('Audio path attempted:', audioPath);
       setIsPlaying(false);
@@ -208,11 +302,34 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
       setCurrentTime(0);
       setDuration(0);
       
-      // Mark chapter as completed if it's a chapter audio (not verse)
-      if (audioKey.includes('chapter') && !audioKey.includes('-')) {
+      // Track that audio has finished for this chapter
+      const parts = audioKey.split('-');
+      const bookId = parts[0];
+      const chapterId = parts[1];
+      const verseId = parts[2]; // This will be undefined for chapter audio
+      
+      // Check if this is a full chapter audio (not a verse)
+      // For chapter audio like "genesis-2", there are only 2 parts
+      // For verse audio like "genesis-2-5", there are 3 parts
+      if (parts.length === 2) {
         const chapterKey = audioKey;
-        setCompletedChapters(prev => new Set([...prev, chapterKey]));
-        console.log('🎉 Chapter completed:', chapterKey);
+        console.log('🎵 Audio finished for chapter:', chapterKey, 'verseId:', verseId);
+        setAudioFinishedChapters(prev => {
+          const newSet = new Set([...prev, chapterKey]);
+          console.log('🎵 Updated audioFinishedChapters:', Array.from(newSet));
+          return newSet;
+        });
+        
+        // Show audio finished message
+        showInfo(
+          'Audio Finished!',
+          `You've finished listening to ${bookId} Chapter ${chapterId}. Click "Mark as Complete" below if you want to mark it as complete.`
+        );
+      } else if (parts.length === 3) {
+        showSuccess(
+          'Verse Completed!',
+          `You've completed ${bookId} Chapter ${chapterId}, Verse ${verseId}.`
+        );
       }
     };
 
@@ -232,6 +349,46 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
     { id: 'aria', name: 'Aria', avatar: '/presets/Preset3.jpg' },
     { id: 'heartsease', name: 'Heartsease', avatar: '/presets/Preset4.jpg' }
   ];
+
+  // Save note function
+  const saveNote = () => {
+    if (note.trim() && book) {
+      const newNotes = { ...savedNotes, [Date.now().toString()]: note.trim() };
+      setSavedNotes(newNotes);
+      localStorage.setItem(`asmrts_notes_${book.id}`, JSON.stringify(newNotes));
+      setNote('');
+      showSuccess('Note Saved!', 'Your note has been saved successfully.');
+    }
+  };
+
+  // Clear note function
+  const clearNote = () => {
+    setNote('');
+  };
+
+  // Load exact durations for available chapters
+  const loadExactDurations = async (bookId: string, preset: string) => {
+    if (!isAudioAvailable(bookId, 1, preset)) return; // Only load if book has audio
+    
+    const durations = new Map<string, string>();
+    
+    // Load durations for Genesis chapters 1-12 (only available chapters)
+    for (let chapterId = 1; chapterId <= 12; chapterId++) {
+      if (isAudioAvailable(bookId, chapterId, preset)) {
+        try {
+          const duration = await getAudioDuration(bookId, chapterId, preset);
+          if (duration) {
+            durations.set(`${bookId}-${chapterId}`, duration.formatted);
+            console.log(`Loaded duration for ${bookId} Chapter ${chapterId}: ${duration.formatted}`);
+          }
+        } catch (error) {
+          console.warn(`Failed to load duration for ${bookId} Chapter ${chapterId}:`, error);
+        }
+      }
+    }
+    
+    setExactDurations(durations);
+  };
 
 
 
@@ -259,8 +416,9 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Header />
+    <ProtectedRoute>
+      <div className="min-h-screen bg-gray-50">
+        <Header />
       
       {/* Navigation Header */}
       <header className="bg-white shadow-sm border-b border-gray-100">
@@ -300,13 +458,34 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
           
           {/* Tab Menu */}
           <div className="flex">
-            <button className="px-4 py-2 text-sm font-medium text-blue-600 border-b-2 border-blue-600 bg-blue-50">
+            <button 
+              onClick={() => setChapterFilter('all')}
+              className={`px-4 py-2 text-sm font-medium transition-colors cursor-pointer ${
+                chapterFilter === 'all'
+                  ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
+                  : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+              }`}
+            >
               All
             </button>
-            <button className="px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-700 hover:bg-gray-50 transition-colors">
+            <button 
+              onClick={() => setChapterFilter('in-progress')}
+              className={`px-4 py-2 text-sm font-medium transition-colors cursor-pointer ${
+                chapterFilter === 'in-progress'
+                  ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
+                  : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+              }`}
+            >
               In Progress
             </button>
-            <button className="px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-700 hover:bg-gray-50 transition-colors">
+            <button 
+              onClick={() => setChapterFilter('completed')}
+              className={`px-4 py-2 text-sm font-medium transition-colors cursor-pointer ${
+                chapterFilter === 'completed'
+                  ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
+                  : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+              }`}
+            >
               Complete
             </button>
           </div>
@@ -316,6 +495,36 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
       <main className="w-full px-4 py-8 bg-white">
         <div className="max-w-6xl mx-auto">
 
+          {/* Progress Summary */}
+          {book && (() => {
+            const bookProgress = getBookProgress(book.id);
+            if (bookProgress && bookProgress.overallProgress > 0) {
+              return (
+                <div className="bg-gradient-to-r from-purple-50 to-blue-50 rounded-xl p-6 mb-6 border border-purple-200">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-semibold text-gray-900">Reading Progress</h3>
+                    <span className="text-sm text-gray-600">
+                      {bookProgress.completedChapters} of {bookProgress.totalChapters} chapters completed
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-3 mb-2">
+                    <div 
+                      className="bg-gradient-to-r from-purple-500 to-blue-500 h-3 rounded-full transition-all duration-500"
+                      style={{ width: `${bookProgress.overallProgress}%` }}
+                    />
+                  </div>
+                  <div className="flex justify-between text-sm text-gray-600">
+                    <span>{Math.round(bookProgress.overallProgress)}% Complete</span>
+                    {bookProgress.inProgressChapters > 0 && (
+                      <span>{bookProgress.inProgressChapters} in progress</span>
+                    )}
+                  </div>
+                </div>
+              );
+            }
+            return null;
+          })()}
+
           {/* Reader Selection - Full Width */}
           <div className="bg-white rounded-lg p-4 shadow-sm mb-6 border border-gray-200">
             <div className="flex items-center gap-4">
@@ -324,7 +533,11 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
                 {readers.map((reader) => (
                   <button
                     key={reader.id}
-                    onClick={() => setSelectedReader(reader.id as VoicePreset)}
+                    onClick={() => {
+                      setSelectedReader(reader.id as VoicePreset);
+                      // Track preset selection
+                      trackPresetSelect(reader.id);
+                    }}
                     className={`p-2 rounded-lg border-2 transition-all flex-1 flex items-center gap-2 ${
                       selectedReader === reader.id
                         ? 'border-purple-500 bg-purple-50'
@@ -345,9 +558,31 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
             </div>
           </div>
 
+          {/* Filter Results Count */}
+          <div className="mb-4 text-sm text-gray-600">
+            {(() => {
+              const filteredChapters = book.chapterList.filter((chapter) => {
+                if (chapterFilter === 'all') return true;
+                const trackingStatus = getCompletionStatus(book.id, chapter.id, selectedReader);
+                if (chapterFilter === 'completed') return trackingStatus.status === 'completed';
+                if (chapterFilter === 'in-progress') return trackingStatus.status === 'in-progress';
+                return true;
+              });
+              return `Showing ${filteredChapters.length} of ${book.chapterList.length} chapters`;
+            })()}
+          </div>
+
           {/* Chapter Cards - Full Width */}
           <div className="space-y-4">
-          {book.chapterList.map((chapter) => (
+          {book.chapterList
+            .filter((chapter) => {
+              if (chapterFilter === 'all') return true;
+              const trackingStatus = getCompletionStatus(book.id, chapter.id, selectedReader);
+              if (chapterFilter === 'completed') return trackingStatus.status === 'completed';
+              if (chapterFilter === 'in-progress') return trackingStatus.status === 'in-progress';
+              return true;
+            })
+            .map((chapter) => (
             <div key={chapter.id} className="bg-gradient-to-r from-white to-purple-50 rounded-xl shadow-lg border border-purple-100 hover:shadow-xl transition-all duration-300 overflow-hidden">
               {/* Collapsed Header */}
               <div 
@@ -357,81 +592,145 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4">
                     <div className={`w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold shadow-md ${
-                      chapter.status === 'completed' ? 'bg-gradient-to-br from-green-400 to-green-600 text-white' :
-                      chapter.status === 'error' ? 'bg-gradient-to-br from-red-400 to-red-600 text-white' :
-                      chapter.status === 'pending' ? 'bg-gradient-to-br from-yellow-400 to-orange-500 text-white' :
-                      'bg-gradient-to-br from-blue-400 to-purple-600 text-white'
+                      (() => {
+                        const trackingStatus = getCompletionStatus(book.id, chapter.id, selectedReader);
+                        if (trackingStatus.status === 'completed') return 'bg-gradient-to-br from-green-400 to-green-600 text-white';
+                        if (trackingStatus.status === 'in-progress') return 'bg-gradient-to-br from-yellow-400 to-orange-500 text-white';
+                        if (chapter.status === 'error') return 'bg-gradient-to-br from-red-400 to-red-600 text-white';
+                        return 'bg-gradient-to-br from-blue-400 to-purple-600 text-white';
+                      })()
                     }`}>
-                      {chapter.status === 'completed' ? '✓' : 
-                       chapter.status === 'error' ? '✗' : 
-                       chapter.status === 'pending' ? '⏳' : chapter.id}
+                      {(() => {
+                        const trackingStatus = getCompletionStatus(book.id, chapter.id, selectedReader);
+                        if (trackingStatus.status === 'completed') return '✓';
+                        if (trackingStatus.status === 'in-progress') return '⏳';
+                        if (chapter.status === 'error') return '✗';
+                        return chapter.id;
+                      })()}
                     </div>
                     <div className="flex-1">
                       <h3 className="text-xl font-bold text-gray-900 mb-1">
                         {chapter.title}
                       </h3>
                       <div className="flex items-center gap-4 text-sm text-gray-600">
-                        <span className="flex items-center gap-1">
-                          <Clock className="w-4 h-4" />
-                          {chapter.duration}
-                        </span>
+                        {isAudioAvailable(book.id, chapter.id, selectedReader) && (
+                          <span className="flex items-center gap-1">
+                            <Clock className="w-4 h-4" />
+                            {exactDurations.get(`${book.id}-${chapter.id}`) || chapter.duration}
+                          </span>
+                        )}
                         <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          completedChapters.has(`${book.id}-${chapter.id}`) ? 'bg-green-100 text-green-800' :
-                          chapter.status === 'completed' ? 'bg-green-100 text-green-800' :
-                          chapter.status === 'error' ? 'bg-red-100 text-red-800' :
-                          chapter.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                          'bg-blue-100 text-blue-800'
+                          (() => {
+                            const trackingStatus = getCompletionStatus(book.id, chapter.id, selectedReader);
+                            const hasAudio = isAudioAvailable(book.id, chapter.id, selectedReader);
+                            
+                            if (trackingStatus.status === 'completed') return 'bg-green-100 text-green-800';
+                            if (trackingStatus.status === 'in-progress') return 'bg-yellow-100 text-yellow-800';
+                            if (chapter.status === 'error') return 'bg-red-100 text-red-800';
+                            if (!hasAudio) return 'bg-gray-100 text-gray-600';
+                            return 'bg-blue-100 text-blue-800';
+                          })()
                         }`}>
-                          {completedChapters.has(`${book.id}-${chapter.id}`) ? '✓ Completed' : chapter.status}
+                          {(() => {
+                            const trackingStatus = getCompletionStatus(book.id, chapter.id, selectedReader);
+                            const hasAudio = isAudioAvailable(book.id, chapter.id, selectedReader);
+                            
+                            if (trackingStatus.status === 'completed') return '✓ Completed';
+                            if (trackingStatus.status === 'in-progress') return '⏳ In Progress';
+                            if (chapter.status === 'error') return '✗ Error';
+                            if (!hasAudio) return '🔇 No Audio';
+                            return 'Available';
+                          })()}
                         </span>
                       </div>
                       
-                      {/* Progress Bar - Show when this chapter is playing */}
-                      {(playingChapter === `${book.id}-${chapter.id}` || playingVerse?.startsWith(`${book.id}-${chapter.id}`)) && duration > 0 && (
-                        <div className="mt-3">
-                          <div className="flex items-center gap-2 text-xs text-gray-500 mb-1">
-                            <span>{Math.floor(currentTime / 60)}:{(currentTime % 60).toFixed(0).padStart(2, '0')}</span>
-                            <div className="flex-1 bg-gray-200 rounded-full h-1">
-                              <div 
-                                className="bg-purple-500 h-1 rounded-full transition-all duration-100"
-                                style={{ width: `${(currentTime / duration) * 100}%` }}
-                              ></div>
+                      {/* Progress Bar - Show when this chapter is playing or has progress */}
+                      {(() => {
+                        const trackingStatus = getCompletionStatus(book.id, chapter.id, selectedReader);
+                        const isPlaying = (playingChapter === `${book.id}-${chapter.id}` || playingVerse?.startsWith(`${book.id}-${chapter.id}`)) && duration > 0;
+                        const hasProgress = trackingStatus.progress > 0;
+                        
+                        if (isPlaying || hasProgress) {
+                          return (
+                            <div className="mt-3">
+                              <div className="flex items-center gap-2 text-xs text-gray-500 mb-1">
+                                <span>
+                                  {isPlaying 
+                                    ? `${Math.floor(currentTime / 60)}:${(currentTime % 60).toFixed(0).padStart(2, '0')}`
+                                    : `${Math.floor(trackingStatus.progress)}%`
+                                  }
+                                </span>
+                                <div className="flex-1 bg-gray-200 rounded-full h-1">
+                                  <div 
+                                    className={`h-1 rounded-full transition-all duration-100 ${
+                                      trackingStatus.status === 'completed' 
+                                        ? 'bg-green-500' 
+                                        : 'bg-purple-500'
+                                    }`}
+                                    style={{ 
+                                      width: `${isPlaying 
+                                        ? (currentTime / duration) * 100 
+                                        : trackingStatus.progress
+                                      }%` 
+                                    }}
+                                  ></div>
+                                </div>
+                                <span>
+                                  {isPlaying 
+                                    ? `${Math.floor(duration / 60)}:${(duration % 60).toFixed(0).padStart(2, '0')}`
+                                    : '100%'
+                                  }
+                                </span>
+                              </div>
                             </div>
-                            <span>{Math.floor(duration / 60)}:{(duration % 60).toFixed(0).padStart(2, '0')}</span>
-                          </div>
-                        </div>
-                      )}
+                          );
+                        }
+                        return null;
+                      })()}
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <button 
-                      className="p-3 bg-purple-500 hover:bg-purple-600 rounded-full transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105"
-                      onClick={(e) => {
-                        e.stopPropagation();
+                    <div onClick={(e) => e.stopPropagation()}>
+                      {(() => {
                         const chapterKey = `${book.id}-${chapter.id}`;
-                        console.log(`🎯 CHAPTER ${chapter.id} BUTTON CLICKED`);
-                        
-                        if (playingChapter === chapterKey) {
-                          stopAudio();
-                        } else {
+                        const isThisChapterPlaying = playingChapter === chapterKey && isPlaying;
+                        console.log(`🎯 MAIN Chapter ${chapter.id} button:`, {
+                          chapterKey,
+                          playingChapter,
+                          isPlaying,
+                          isThisChapterPlaying,
+                          'playingChapter === chapterKey': playingChapter === chapterKey
+                        });
+                        return null;
+                      })()}
+                      <SimplePlayButton
+                        key={`main-chapter-${book.id}-${chapter.id}-${playingChapter}-${isPlaying}`}
+                        isPlaying={playingChapter === `${book.id}-${chapter.id}` && isPlaying}
+                        onPlay={() => {
+                          const chapterKey = `${book.id}-${chapter.id}`;
+                          
+                          if (!isAudioAvailable(book.id, chapter.id, selectedReader)) {
+                            showWarning(
+                              'Audio Not Available',
+                              `Audio for ${book.id} Chapter ${chapter.id} is not available yet. Only Genesis chapters 1-12 have audio available.`
+                            );
+                            return;
+                          }
+                          
                           const audioPath = getAudioPath(selectedReader, book.id, chapter.id, 'chapter');
-                          console.log(`🎯 PLAYING: ${audioPath}`);
                           playAudio(audioPath, chapterKey);
-                        }
-                      }}
-                      title="Play full chapter"
-                    >
-                      {audioLoading && playingChapter === `${book.id}-${chapter.id}` ? (
-                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                      ) : playingChapter === `${book.id}-${chapter.id}` && isPlaying ? (
-                        <div className="flex gap-0.5">
-                          <div className="w-1 h-4 bg-white"></div>
-                          <div className="w-1 h-4 bg-white"></div>
-                        </div>
-                      ) : (
-                        <div className="w-0 h-0 border-l-[8px] border-l-white border-t-[6px] border-t-transparent border-b-[6px] border-b-transparent ml-0.5"></div>
-                      )}
-                    </button>
+                        }}
+                        onPause={() => {
+                          const chapterKey = `${book.id}-${chapter.id}`;
+                          stopAudio();
+                        }}
+                        className={`${
+                          !isAudioAvailable(book.id, chapter.id, selectedReader)
+                            ? 'opacity-50 cursor-not-allowed'
+                            : ''
+                        }`}
+                      />
+                    </div>
                     <div className={`transform transition-transform duration-300 ${
                       expandedChapter === chapter.id ? 'rotate-180' : ''
                     }`}>
@@ -452,36 +751,28 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
                         <p className="text-gray-300 text-sm">{book.title} - {chapter.title}</p>
                       </div>
                       
-                      <div className="flex items-center justify-between">
-                        <button
-                          onClick={() => {
+                      <div className="flex items-center gap-3">
+                        {/* Play Button - Left aligned */}
+                        <SimplePlayButton
+                          key={`expanded-chapter-${book.id}-${chapter.id}-${playingChapter}-${isPlaying}`}
+                          isPlaying={playingChapter === `${book.id}-${chapter.id}` && isPlaying}
+                          onPlay={() => {
                             const chapterKey = `${book.id}-${chapter.id}`;
-                            if (playingChapter === chapterKey) {
-                              stopAudio();
-                            } else {
-                              // Use the actual audio file path (files are named 1.mp3, 2.mp3, etc.)
-                              const audioPath = getAudioPath(selectedReader, book.id, chapter.id, 'chapter');
-                              console.log(`🎯 EXPANDED CHAPTER ${chapter.id} - PLAYING: ${audioPath}`);
-                              playAudio(audioPath, chapterKey);
-                            }
+                            const audioPath = getAudioPath(selectedReader, book.id, chapter.id, 'chapter');
+                            playAudio(audioPath, chapterKey);
                           }}
-                          className="w-8 h-8 bg-white rounded-full flex items-center justify-center hover:bg-gray-100 transition-all duration-300 shadow-md hover:shadow-lg"
-                        >
-                          {audioLoading && playingChapter === `${book.id}-${chapter.id}` ? (
-                            <div className="w-4 h-4 border-2 border-gray-800 border-t-transparent rounded-full animate-spin"></div>
-                          ) : playingChapter === `${book.id}-${chapter.id}` ? (
-                            <div className="flex gap-0.5">
-                              <div className="w-1.5 h-4 bg-gray-800"></div>
-                              <div className="w-1.5 h-4 bg-gray-800"></div>
-                            </div>
-                          ) : (
-                            <div className="w-0 h-0 border-l-[8px] border-l-gray-800 border-t-[5px] border-t-transparent border-b-[5px] border-b-transparent ml-0.5"></div>
-                          )}
-                        </button>
+                          onPause={() => {
+                            const chapterKey = `${book.id}-${chapter.id}`;
+                            stopAudio();
+                          }}
+                          className="!p-0 w-12 h-12 !flex !items-center !justify-center"
+                        />
                         
-                        <span className="text-white text-xs font-mono ml-4">0:00</span>
+                        {/* Time */}
+                        <span className="text-white text-xs font-mono">0:00</span>
                         
-                        <div className="flex-1 mx-4">
+                        {/* Progress Bar */}
+                        <div className="flex-1">
                           <div className="w-full bg-gray-600 rounded-full h-2">
                             <div className="bg-gradient-to-r from-purple-400 to-blue-400 h-2 rounded-full w-0 relative">
                               <div className="absolute right-0 top-1/2 transform -translate-y-1/2 w-3 h-3 bg-white rounded-full border-2 border-purple-400 shadow-md"></div>
@@ -489,9 +780,60 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
                           </div>
                         </div>
                         
-                        <span className="text-white text-xs font-mono">{chapter.duration}</span>
+                        {/* Duration */}
+                        {isAudioAvailable(book.id, chapter.id, selectedReader) && (
+                          <span className="text-white text-xs font-mono">{exactDurations.get(`${book.id}-${chapter.id}`) || chapter.duration}</span>
+                        )}
                       </div>
                     </div>
+                    
+
+                    {/* Mark as Complete Button - Only show after audio finishes */}
+                    {(() => {
+                      const chapterKey = `${book.id}-${chapter.id}`;
+                      const trackingStatus = getCompletionStatus(book.id, chapter.id, selectedReader);
+                      const hasAudioFinished = audioFinishedChapters.has(chapterKey);
+                      
+                      console.log('🔍 Mark Complete Button Check:', {
+                        chapterKey,
+                        hasAudioFinished,
+                        trackingStatus: trackingStatus.status,
+                        audioFinishedChapters: Array.from(audioFinishedChapters),
+                        shouldShowButton: hasAudioFinished && trackingStatus.status !== 'completed'
+                      });
+                      
+                      
+                      if (hasAudioFinished && trackingStatus.status !== 'completed') {
+                        return (
+                          <div className="mt-4 text-center">
+                            <button 
+                              className="px-6 py-3 bg-green-500 hover:bg-green-600 text-white font-medium rounded-lg transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105"
+                              onClick={() => {
+                                if (!book) return;
+                                markCompleted(book.id, chapter.id, undefined, selectedReader);
+                                
+                                // Track chapter completion event
+                                trackChapterComplete(book.id, chapter.id, selectedReader);
+                                
+                                showSuccess(
+                                  'Chapter Marked Complete!',
+                                  `You've marked ${book.title} Chapter ${chapter.id} as complete. Great job!`
+                                );
+                                // Remove from audio finished list since it's now completed
+                                setAudioFinishedChapters(prev => {
+                                  const newSet = new Set(prev);
+                                  newSet.delete(chapterKey);
+                                  return newSet;
+                                });
+                              }}
+                            >
+                              ✓ Mark as Complete
+                            </button>
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
                   </div>
 
                   {/* Verse-by-Verse Content */}
@@ -536,29 +878,26 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
                               <div className={`flex-shrink-0 transition-all duration-300 ${
                                 playingVerse === verseKey ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
                               }`}>
-                                <button
-                                  className={`w-8 h-8 rounded-full flex items-center justify-center transition-all duration-300 ${
-                                    playingVerse === verseKey
-                                      ? 'bg-gradient-to-br from-purple-500 to-blue-500 text-white shadow-lg'
-                                      : 'bg-gray-200 text-gray-600 hover:bg-purple-200 hover:text-purple-700'
-                                  }`}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    // Individual verse audio files (1.mp3, 2.mp3, etc.)
-                                    const audioPath = getAudioPath(selectedReader, book.id, chapter.id, 'verse', parseInt(verseNumber));
-                                    console.log(`Verse button clicked for Chapter ${chapter.id} - playing:`, audioPath);
-                                    playAudio(audioPath, verseKey);
-                                  }}
-                                >
-                                  {playingVerse === verseKey && isPlaying ? (
-                                    <div className="flex gap-0.5">
-                                      <div className="w-1 h-3 bg-white"></div>
-                                      <div className="w-1 h-3 bg-white"></div>
-                                    </div>
-                                  ) : (
-                                    <div className="w-0 h-0 border-l-[6px] border-l-current border-t-[4px] border-t-transparent border-b-[4px] border-b-transparent ml-0.5"></div>
-                                  )}
-                                </button>
+                                <div onClick={(e) => e.stopPropagation()}>
+                                  <SimplePlayButton
+                                    key={`verse-${verseKey}-${playingVerse}-${isPlaying}`}
+                                    isPlaying={playingVerse === verseKey && isPlaying}
+                                    onPlay={() => {
+                                      // Individual verse audio files (1.mp3, 2.mp3, etc.)
+                                      const audioPath = getAudioPath(selectedReader, book.id, chapter.id, 'verse', parseInt(verseNumber));
+                                      console.log(`Verse button clicked for Chapter ${chapter.id} - playing:`, audioPath);
+                                      playAudio(audioPath, verseKey);
+                                    }}
+                                    onPause={() => {
+                                      stopAudio();
+                                    }}
+                                    className={`w-8 h-8 rounded-full flex items-center justify-center transition-all duration-300 ${
+                                      playingVerse === verseKey
+                                        ? 'bg-gradient-to-br from-purple-500 to-blue-500 text-white shadow-lg'
+                                        : 'bg-gray-200 text-gray-600 hover:bg-purple-200 hover:text-purple-700'
+                                    }`}
+                                  />
+                                </div>
                               </div>
                             </div>
                             
@@ -589,19 +928,66 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
                 className="w-full h-32 p-3 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
               />
               <div className="flex items-center gap-3 mt-3">
-                <button className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm">
+                <button 
+                  onClick={saveNote}
+                  className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm"
+                >
                   Save Note
                 </button>
-                <button className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-sm">
+                <button 
+                  onClick={clearNote}
+                  className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-sm"
+                >
                   Clear
                 </button>
               </div>
             </div>
           </div>
+
+          {/* Saved Notes Display */}
+          {Object.keys(savedNotes).length > 0 && (
+            <div className="mt-6 bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg shadow-sm border border-purple-200">
+              <div className="p-4">
+                <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                  <span className="text-purple-600">📝</span>
+                  Saved Notes
+                </h3>
+                <div className="space-y-3">
+                  {Object.entries(savedNotes)
+                    .sort(([a], [b]) => parseInt(b) - parseInt(a)) // Show newest first
+                    .map(([timestamp, noteText]) => (
+                      <div key={timestamp} className="bg-white rounded-lg p-3 border border-gray-200">
+                        <div className="flex justify-between items-start mb-2">
+                          <span className="text-xs text-gray-500">
+                            {new Date(parseInt(timestamp)).toLocaleDateString()} at {new Date(parseInt(timestamp)).toLocaleTimeString()}
+                          </span>
+                          <button
+                            onClick={() => {
+                              const newNotes = { ...savedNotes };
+                              delete newNotes[timestamp];
+                              setSavedNotes(newNotes);
+                              if (book) {
+                                localStorage.setItem(`asmrts_notes_${book.id}`, JSON.stringify(newNotes));
+                              }
+                            }}
+                            className="text-red-500 hover:text-red-700 text-xs"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                        <p className="text-gray-700 text-sm">{noteText}</p>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            </div>
+          )}
+
         </div>
       </main>
       
-      <Footer />
-    </div>
+        <Footer />
+      </div>
+    </ProtectedRoute>
   );
 } 
