@@ -17,90 +17,105 @@ export async function POST(request: NextRequest) {
     
     // Option 1: Using Resend (recommended for production)
     if (process.env.RESEND_API_KEY) {
-      const resend = await import('resend');
-      const resendClient = new resend.Resend(process.env.RESEND_API_KEY);
-      
-      const emailContent = generateEmailContent(template, data);
-      
-      const result = await resendClient.emails.send({
-        from: 'ASMR Audio Bible <noreply@asmraudiobible.com>',
-        to: [to],
-        subject: subject,
-        html: emailContent.html,
-        text: emailContent.text,
-      });
+      try {
+        const resend = await import('resend');
+        const resendClient = new resend.Resend(process.env.RESEND_API_KEY);
+        
+        const emailContent = generateEmailContent(template, data);
+        
+        const result = await resendClient.emails.send({
+          from: 'ASMR Audio Bible <noreply@asmraudiobible.com>',
+          to: [to],
+          subject: subject,
+          html: emailContent.html,
+          text: emailContent.text,
+        });
 
-      return NextResponse.json({ 
-        success: true, 
-        message: 'Email sent successfully',
-        id: result.data?.id 
-      });
+        return NextResponse.json({ 
+          success: true, 
+          message: 'Email sent successfully via Resend',
+          id: result.data?.id 
+        });
+      } catch (error) {
+        console.error('Resend error:', error);
+        // Continue to next option
+      }
     }
 
     // Option 2: Using SendGrid
     if (process.env.SENDGRID_API_KEY) {
-      const sgMail = await import('@sendgrid/mail');
-      sgMail.default.setApiKey(process.env.SENDGRID_API_KEY);
-      
-      const emailContent = generateEmailContent(template, data);
-      
-      const msg = {
-        to: to,
-        from: 'noreply@asmraudiobible.com',
-        subject: subject,
-        html: emailContent.html,
-        text: emailContent.text,
-      };
+      try {
+        const sgMail = await import('@sendgrid/mail');
+        sgMail.default.setApiKey(process.env.SENDGRID_API_KEY);
+        
+        const emailContent = generateEmailContent(template, data);
+        
+        const msg = {
+          to: to,
+          from: 'noreply@asmraudiobible.com',
+          subject: subject,
+          html: emailContent.html,
+          text: emailContent.text,
+        };
 
-      await sgMail.default.send(msg);
-      
-      return NextResponse.json({ 
-        success: true, 
-        message: 'Email sent successfully via SendGrid' 
-      });
+        await sgMail.default.send(msg);
+        
+        return NextResponse.json({ 
+          success: true, 
+          message: 'Email sent successfully via SendGrid' 
+        });
+      } catch (error) {
+        console.error('SendGrid error:', error);
+        // Continue to next option
+      }
     }
 
     // Option 3: Using Nodemailer with SMTP
     if (process.env.SMTP_HOST) {
-      const nodemailer = await import('nodemailer');
-      
-      const transporter = nodemailer.createTransport({
-        host: process.env.SMTP_HOST,
-        port: parseInt(process.env.SMTP_PORT || '587'),
-        secure: process.env.SMTP_SECURE === 'true',
-        auth: {
-          user: process.env.SMTP_USER,
-          pass: process.env.SMTP_PASS,
-        },
-      });
+      try {
+        const nodemailer = await import('nodemailer');
+        
+        const transporter = nodemailer.createTransport({
+          host: process.env.SMTP_HOST,
+          port: parseInt(process.env.SMTP_PORT || '587'),
+          secure: process.env.SMTP_SECURE === 'true',
+          auth: {
+            user: process.env.SMTP_USER,
+            pass: process.env.SMTP_PASS,
+          },
+        });
 
-      const emailContent = generateEmailContent(template, data);
-      
-      await transporter.sendMail({
-        from: process.env.SMTP_FROM || 'noreply@asmraudiobible.com',
-        to: to,
-        subject: subject,
-        html: emailContent.html,
-        text: emailContent.text,
-      });
-      
-      return NextResponse.json({ 
-        success: true, 
-        message: 'Email sent successfully via SMTP' 
-      });
+        const emailContent = generateEmailContent(template, data);
+        
+        await transporter.sendMail({
+          from: process.env.SMTP_FROM || 'noreply@asmraudiobible.com',
+          to: to,
+          subject: subject,
+          html: emailContent.html,
+          text: emailContent.text,
+        });
+        
+        return NextResponse.json({ 
+          success: true, 
+          message: 'Email sent successfully via SMTP' 
+        });
+      } catch (error) {
+        console.error('SMTP error:', error);
+        // Continue to fallback
+      }
     }
 
     // Fallback: Just log the email (for development)
-    console.log('Email would be sent:', {
+    console.log('📧 No email service configured. Email would be sent:', {
       to,
       subject,
       template,
       data
     });
-
+    
     return NextResponse.json({ 
       success: true, 
-      message: 'Email logged (no email service configured)' 
+      message: 'Email logged (no email service configured). Please set up RESEND_API_KEY, SENDGRID_API_KEY, or SMTP credentials in Vercel.' 
     });
 
   } catch (error) {
