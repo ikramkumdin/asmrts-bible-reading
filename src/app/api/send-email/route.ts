@@ -205,6 +205,75 @@ You can unsubscribe at any time by replying to this email.
     return { html, text };
   }
 
+  if (template === 'dailyReminder') {
+    const progress = typeof data.progressPercent === 'number' ? Math.min(100, Math.max(0, data.progressPercent)) : 0;
+    const chapterLabel = data.chapterLabel || 'Your Chapter';
+    const ctaText = data.ctaText || `Continue Reading ${chapterLabel}`;
+    const buttonUrl = data.buttonUrl || 'https://asmrts-bible-reading.vercel.app/bible';
+    const quoteText = data.quoteText || '“For God so loved the world that he gave his one and only Son, that whoever believes in him shall not perish but have eternal life.”';
+    const quoteRef = data.quoteRef || 'John 3:16';
+    const deliveryHint = data.deliveryType === 'unfinished' 
+      ? "You haven't finished this chapter yet. Pick up where you left off."
+      : 'Enjoy a complete, soothing chapter today.';
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <title>Daily ASMR Bible Reminder</title>
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #2d3748; background: #f7fafc; }
+            .container { max-width: 640px; margin: 0 auto; padding: 20px; }
+            .card { background: #ffffff; border-radius: 10px; box-shadow: 0 6px 20px rgba(0,0,0,0.06); padding: 24px; }
+            .title { font-size: 18px; font-weight: 700; color: #1a202c; margin: 0 0 8px; }
+            .subtitle { color: #4a5568; margin: 0 0 16px; }
+            .progress-wrap { margin: 16px 0; }
+            .progress-bar { height: 8px; background: #e2e8f0; border-radius: 999px; overflow: hidden; }
+            .progress { height: 8px; background: #68d391; width: ${progress}%; }
+            .progress-label { text-align: right; color: #718096; font-size: 12px; margin-top: 6px; }
+            .quote { background: #f7fafc; border-left: 4px solid #a0aec0; padding: 14px 16px; border-radius: 6px; color: #2d3748; font-style: italic; }
+            .quote-ref { text-align: right; color: #718096; font-size: 12px; margin-top: 8px; }
+            .button { margin-top: 20px; display: inline-block; background: #48bb78; color: #ffffff; text-decoration: none; padding: 12px 20px; border-radius: 8px; font-weight: 700; }
+            .features { display: flex; gap: 24px; justify-content: center; color: #4a5568; margin-top: 24px; font-size: 14px; }
+            .footer { text-align: center; color: #a0aec0; font-size: 12px; margin-top: 18px; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="card">
+              <div class="title">Continue Reading: ${chapterLabel}</div>
+              <p class="subtitle">${deliveryHint}</p>
+
+              <div class="progress-wrap">
+                <div class="progress-bar">
+                  <div class="progress"></div>
+                </div>
+                <div class="progress-label">${progress}% completed</div>
+              </div>
+
+              <div class="quote">${quoteText}</div>
+              <div class="quote-ref">- ${quoteRef}</div>
+
+              <a class="button" href="${buttonUrl}">${ctaText}</a>
+
+              <div class="features">
+                <div>🎧 ASMR Audio</div>
+                <div>📝 Take Notes</div>
+              </div>
+              <div class="footer">You're receiving this email because you're subscribed to daily reading reminders.</div>
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
+
+    const text = `
+Daily ASMR Bible Reminder\n\nContinue Reading: ${chapterLabel}\n${deliveryHint}\n\nProgress: ${progress}% completed\n\n${quoteText}\n- ${quoteRef}\n\nOpen: ${buttonUrl}\n`;
+
+    return { html, text };
+  }
+
   return {
     html: '<p>Welcome to ASMR Audio Bible!</p>',
     text: 'Welcome to ASMR Audio Bible!'

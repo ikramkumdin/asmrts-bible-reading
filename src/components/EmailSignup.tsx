@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Mail, Headphones, BookOpen, Settings, CheckCircle, AlertCircle } from 'lucide-react';
-import { subscribeToEmail, saveSubscriptionLocally, isEmailSubscribed, type SubscriptionData } from '@/lib/emailService';
+import { subscribeToEmail, saveSubscriptionLocally, isEmailSubscribed, type SubscriptionData, sendDailyReminderEmail } from '@/lib/emailService';
 import { trackEmailSubscription } from '@/lib/firebaseConfig';
 
 interface SubscriptionPreferences {
@@ -52,6 +52,21 @@ export default function EmailSignup() {
 
                // Track email subscription event
                trackEmailSubscription(asmrModel, deliveryType, frequency);
+
+               // If daily, trigger the first reminder immediately
+               if (frequency === 'daily') {
+                 void sendDailyReminderEmail({
+                   email,
+                   asmrModel,
+                   deliveryType,
+                   chapterLabel: 'John Chapter 3',
+                   progressPercent: 40,
+                   quoteText: 'For God so loved the world that he gave his one and only Son, that whoever believes in him shall not perish but have eternal life.',
+                   quoteRef: 'John 3:16',
+                   buttonUrl: '/bible',
+                   ctaText: 'Continue Reading',
+                 });
+               }
 
                setIsSubscribed(true);
                setEmail('');

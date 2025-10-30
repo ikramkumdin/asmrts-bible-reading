@@ -44,7 +44,7 @@ async function uploadAudioFiles() {
     }
     
     // Upload all audio files recursively
-    await uploadDirectory(AUDIO_DIR, bucket, DESTINATION_PREFIX);
+    await uploadDirectory(AUDIO_DIR, bucket);
     
     console.log('✅ Audio upload completed successfully!');
     console.log(`🌐 Files are now available at: https://storage.googleapis.com/${BUCKET_NAME}/${DESTINATION_PREFIX}`);
@@ -55,7 +55,7 @@ async function uploadAudioFiles() {
   }
 }
 
-async function uploadDirectory(dirPath, bucket, prefix) {
+async function uploadDirectory(dirPath, bucket) {
   const items = fs.readdirSync(dirPath);
   
   for (const item of items) {
@@ -64,11 +64,11 @@ async function uploadDirectory(dirPath, bucket, prefix) {
     
     if (stat.isDirectory()) {
       // Recursively upload subdirectories
-      await uploadDirectory(itemPath, bucket, `${prefix}${item}/`);
+      await uploadDirectory(itemPath, bucket);
     } else if (item.endsWith('.mp3')) {
       // Upload MP3 files
       const fileName = path.relative(AUDIO_DIR, itemPath);
-      const destinationName = `${prefix}${fileName}`;
+      const destinationName = `${DESTINATION_PREFIX}${fileName}`;
       
       console.log(`📤 Uploading: ${fileName} -> ${destinationName}`);
       

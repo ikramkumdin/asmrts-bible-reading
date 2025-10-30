@@ -1,4 +1,5 @@
 // Audio duration utilities to get exact duration from audio files
+import { getAudioBaseUrl } from './audioConfig';
 
 export interface AudioDuration {
   bookId: string;
@@ -71,10 +72,7 @@ export async function getAudioDuration(
 
 // Get audio file path
 function getAudioFilePath(bookId: string, chapterId: number, preset: string): string {
-  const baseUrl = process.env.NODE_ENV === 'production' 
-    ? 'https://storage.googleapis.com/asmrts-bible-audio-files'
-    : '';
-  
+  const baseUrl = getAudioBaseUrl();
   return `${baseUrl}/audio/${preset}/${bookId}/chapter${chapterId}/chapter${chapterId}.mp3`;
 }
 

@@ -17,8 +17,6 @@ export default function SimplePlayButton({
   className = ''
 }: SimplePlayButtonProps) {
   const { isAuthenticated, signIn } = useAuth();
-  
-  console.log('🎨 SimplePlayButton render:', { isAuthenticated, isPlaying, shouldShowPause: isAuthenticated && isPlaying });
 
   const handleClick = () => {
     // If not authenticated, sign in
@@ -29,16 +27,15 @@ export default function SimplePlayButton({
 
     // If authenticated, play/pause
     if (isPlaying) {
-      console.log('🎵 Button calling onPause');
+      console.log('🎵 Pause button clicked');
       onPause?.();
     } else {
-      console.log('🎵 Button calling onPlay');
+      console.log('🎵 Play button clicked');
       onPlay?.();
     }
   };
 
-  const showPauseIcon = isAuthenticated && isPlaying;
-  console.log('🎨 Icon decision:', { showPauseIcon, isAuthenticated, isPlaying });
+  const showPauseIcon = isPlaying;
 
   return (
     <button

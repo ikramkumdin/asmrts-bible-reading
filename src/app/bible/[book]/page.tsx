@@ -11,7 +11,7 @@ import ProtectedRoute from '@/components/ProtectedRoute';
 import { getAudioDuration, type AudioDuration } from '@/lib/audioDuration';
 import { trackAudioPlay, trackAudioComplete, trackChapterComplete, trackBookSelect, trackPresetSelect } from '@/lib/firebaseConfig';
 import { useAuth } from '@/contexts/AuthContext';
-import { saveUserNote, deleteUserNote, loadUserNotes } from '@/lib/userData';
+import { saveUserNote, deleteUserNote, loadUserNotes, type UserNoteRecord } from '@/lib/userData';
 import SimplePlayButton from '@/components/SimplePlayButton';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
@@ -26,9 +26,11 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
   const [book, setBook] = useState<BibleBook | null>(null);
   const [selectedReader, setSelectedReader] = useState<VoicePreset>('aria');
   const [note, setNote] = useState('');
-  const [savedNotes, setSavedNotes] = useState<Record<string, string>>({});
+  const [chapterNotes, setChapterNotes] = useState<Map<string, string>>(new Map()); // chapterKey -> current note text
+  const [savedNotes, setSavedNotes] = useState<UserNoteRecord[]>([]); // all saved notes
   const [isPlaying, setIsPlaying] = useState(false);
   const [expandedChapter, setExpandedChapter] = useState<number | null>(null);
+  const [noteInputChapter, setNoteInputChapter] = useState<number | null>(null);
   const [playingChapter, setPlayingChapter] = useState<string | null>(null);
   const [playingVerse, setPlayingVerse] = useState<string | null>(null);
   const [currentBookIndex, setCurrentBookIndex] = useState(0);
@@ -41,6 +43,10 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
   const [chapterFilter, setChapterFilter] = useState<'all' | 'completed' | 'in-progress'>('all');
   const [audioFinishedChapters, setAudioFinishedChapters] = useState<Set<string>>(new Set());
   const [exactDurations, setExactDurations] = useState<Map<string, string>>(new Map());
+  const [isSeeking, setIsSeeking] = useState(false);
+  const [seekPercent, setSeekPercent] = useState<number|null>(null);
+  const [, forceUpdate] = useState({});
+  const [isTransitioning, setIsTransitioning] = useState(false);
 
   // Tracking and toast hooks
   const { 
@@ -61,9 +67,7 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
       if (!book) return;
       if (user) {
         const notes = await loadUserNotes(user.uid, book.id);
-        const mapped: Record<string, string> = {};
-        notes.forEach(n => { mapped[n.id] = n.text; });
-        setSavedNotes(mapped);
+        setSavedNotes(notes);
       } else if (typeof window !== 'undefined') {
         const saved = localStorage.getItem(`asmrts_notes_${book.id}`);
         if (saved) setSavedNotes(JSON.parse(saved));
@@ -156,10 +160,13 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
   const getAudioPath = (preset: VoicePreset, bookId: string, chapterId: number, audioType: 'chapter' | 'verse', verseNumber?: number) => {
     const baseUrl = getAudioBaseUrl();
     
+    // Convert book IDs to match GCP folder structure (remove hyphens for numbered books)
+    const gcsBookId = bookId.replace('-', ''); // '2-john' -> '2john', '3-john' -> '3john'
+    
     if (audioType === 'chapter') {
-      return `${baseUrl}/audio/${preset}/${bookId}/chapter${chapterId}/chapter${chapterId}.mp3`;
+      return `${baseUrl}/audio/${preset}/${gcsBookId}/chapter${chapterId}/chapter${chapterId}.mp3`;
     } else {
-      return `${baseUrl}/audio/${preset}/${bookId}/chapter${chapterId}/${verseNumber}.mp3`;
+      return `${baseUrl}/audio/${preset}/${gcsBookId}/chapter${chapterId}/${verseNumber}.mp3`;
     }
   };
 
@@ -172,10 +179,14 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
     verseNumber?: number
   ) => {
     const primaryPath = getAudioPath(preset, bookId, chapterId, type, verseNumber);
+    console.log('🎵 ensureAndPlay called:', { preset, bookId, chapterId, type, verseNumber });
+    console.log('🎵 Generated path:', primaryPath);
+    
     try {
       const headResp = await fetch(primaryPath, { method: 'HEAD' });
       if (headResp.ok) {
         const key = type === 'chapter' ? `${bookId}-${chapterId}` : `${bookId}-${chapterId}-${verseNumber}`;
+        console.log('🎵 File exists, calling playAudio with key:', key);
         playAudio(primaryPath, key);
         return;
       }
@@ -200,12 +211,53 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
     showWarning('Audio Not Available', `Audio for ${bookId} Chapter ${chapterId}${type === 'verse' && verseNumber ? ` Verse ${verseNumber}` : ''} is not available yet.`);
   };
 
+  // Helper function to parse audio key correctly (handles book IDs with hyphens)
+  const parseAudioKey = (audioKey: string): { bookId: string; chapterId: string; verseId?: string } => {
+    const parts = audioKey.split('-');
+    
+    if (parts.length >= 3 && ['1', '2', '3'].includes(parts[0])) {
+      // Numbered book: '2-john-1' or '2-john-1-5' or '3-john-1'
+      return {
+        bookId: `${parts[0]}-${parts[1]}`, // '2-john' or '3-john'
+        chapterId: parts[2], // '1'
+        verseId: parts[3] // '5' or undefined
+      };
+    } else {
+      // Regular book: 'genesis-1' or 'genesis-1-5' or 'jude-1'
+      return {
+        bookId: parts[0], // 'genesis' or 'jude'
+        chapterId: parts[1], // '1'
+        verseId: parts[2] // '5' or undefined
+      };
+    }
+  };
+
+  // Helper function to check if audio is available for a book/chapter
+  const hasAudioAvailable = (bookId: string, chapterId: number): boolean => {
+    if (bookId === 'genesis' && chapterId >= 1 && chapterId <= 50) return true;
+    if (bookId === 'jude' && chapterId === 1) return true;
+    // 2 John and 3 John only have verse-by-verse audio, not full chapter audio
+    return false;
+  };
+
+  // Helper function to check if verse audio is available
+  const hasVerseAudioAvailable = (bookId: string, chapterId: number): boolean => {
+    // 2 John and 3 John have verse-by-verse audio
+    if (bookId === '2-john' && chapterId === 1) return true;
+    if (bookId === '3-john' && chapterId === 1) return true;
+    return false;
+  };
+
   // Audio playback functions
   const playAudio = (audioPath: string, audioKey: string) => {
     
     // Check if audio is available
-    const [bookId, chapterId, verseId] = audioKey.split('-');
-    const isAvailable = bookId === 'genesis' && parseInt(chapterId) >= 1 && parseInt(chapterId) <= 24;
+    const { bookId, chapterId, verseId } = parseAudioKey(audioKey);
+    
+    // Check availability based on whether it's verse or chapter audio
+    const isAvailable = verseId 
+      ? hasVerseAudioAvailable(bookId, parseInt(chapterId))  // Verse audio
+      : hasAudioAvailable(bookId, parseInt(chapterId));       // Chapter audio
     
     if (!isAvailable) {
       showWarning(
@@ -237,47 +289,85 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
       console.log('Stopping current audio and starting new one');
       currentAudio.pause();
       currentAudio.currentTime = 0;
+      currentAudio.src = ''; // Clear src before creating new element
+      currentAudio.remove(); // Remove from DOM if it was in DOM
     }
 
     // Set loading state
     setAudioLoading(true);
+    setIsTransitioning(true);
 
     // Create new audio element with proper CORS for cross-origin streaming
+    // Always create a new element to avoid caching issues
     const audio = new Audio();
     audio.crossOrigin = 'anonymous';
-    audio.src = audioPath;
+    
+    // Add cache-busting timestamp to ensure we don't get cached audio
+    const cacheBustPath = audioPath + '?t=' + Date.now();
+    console.log('🎵 Loading audio for key:', audioKey);
+    console.log('🎵 Original path:', audioPath);
+    console.log('🎵 Cache-busted path:', cacheBustPath);
+    
+    audio.src = cacheBustPath;
     audio.volume = 0.8; // Set volume to 80%
     audio.preload = 'metadata'; // Preload metadata for faster start
+
+    // Reset playback state for UI
+    setDuration(0);
+    setCurrentTime(0);
+    setIsSeeking(false);
+    setSeekPercent(null);
     setCurrentAudio(audio);
     
     // Set playing states
-    if (audioKey.includes('chapter')) {
+    const { bookId: parsedBookId, chapterId: parsedChapterId, verseId: parsedVerseId } = parseAudioKey(audioKey);
+    const isChapterAudio = !parsedVerseId; // No verse ID = chapter audio
+    const isVerseAudio = !!parsedVerseId; // Has verse ID = verse audio
+    
+    if (isChapterAudio) {
       console.log('🎵 Setting playingChapter to:', audioKey);
       setPlayingChapter(audioKey);
       setPlayingVerse(null);
       // Mark chapter as in progress
-      markInProgress(bookId, parseInt(chapterId), undefined, selectedReader);
+      markInProgress(parsedBookId, parseInt(parsedChapterId), undefined, selectedReader);
       
       // Track audio play event
-      trackAudioPlay(bookId, parseInt(chapterId), selectedReader, 'chapter');
-    } else {
+      trackAudioPlay(parsedBookId, parseInt(parsedChapterId), selectedReader, 'chapter');
+    } else if (isVerseAudio) {
       console.log('🎵 Setting playingVerse to:', audioKey);
       setPlayingVerse(audioKey);
       setPlayingChapter(null);
       // Mark verse as in progress
-      markInProgress(bookId, parseInt(chapterId), parseInt(verseId), selectedReader);
+      markInProgress(parsedBookId, parseInt(parsedChapterId), parseInt(parsedVerseId), selectedReader);
       
       // Track audio play event
-      trackAudioPlay(bookId, parseInt(chapterId), selectedReader, 'verse', parseInt(verseId));
+      trackAudioPlay(parsedBookId, parseInt(parsedChapterId), selectedReader, 'verse', parseInt(parsedVerseId));
     }
     
     // Note: isPlaying will be set to true when audio.play() promise resolves
 
+    // Metadata loaded -> set duration
+    audio.onloadedmetadata = () => {
+      setDuration(isFinite(audio.duration) ? audio.duration : 0);
+    };
+
     // Add load event listener
     audio.onloadeddata = () => {
-      console.log('Audio loaded successfully:', audioPath);
-      console.log('Audio duration:', audio.duration, 'seconds');
-      console.log('Audio src:', audio.src);
+      const actualChapter = audio.src.match(/chapter(\d+)/)?.[1];
+      const expectedChapter = audioPath.match(/chapter(\d+)/)?.[1];
+      console.log('✅ Audio loaded successfully');
+      console.log('📁 Expected path:', audioPath);
+      console.log('📁 Actual src:', audio.src);
+      console.log('🔢 Expected chapter:', expectedChapter);
+      console.log('🔢 Actual chapter in URL:', actualChapter);
+      console.log('🎯 Audio key:', audioKey);
+      console.log('⏱️ Audio duration:', audio.duration, 'seconds');
+      
+      if (expectedChapter !== actualChapter) {
+        console.error('❌ MISMATCH! Expected chapter', expectedChapter, 'but got', actualChapter);
+      } else {
+        console.log('✅ Chapter match confirmed!');
+      }
       setAudioLoading(false);
     };
 
@@ -285,6 +375,13 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
     audio.oncanplay = () => {
       console.log('Audio can play:', audioPath);
       setAudioLoading(false);
+    };
+
+    // Keep currentTime in sync for the progress UI (unless user is seeking)
+    audio.ontimeupdate = () => {
+      if (!isSeeking) {
+        setCurrentTime(audio.currentTime || 0);
+      }
     };
 
     // Add play event listener
@@ -296,13 +393,22 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
         setPlayingChapter(audioKey);
       }
       console.log('🎵 After onplay - isPlaying should be true, playingChapter:', audioKey);
+      forceUpdate({});
+    };
+
+    // Add pause event listener
+    audio.onpause = () => {
+      console.log('🎵 Audio onpause event fired for:', audioKey);
+      setIsPlaying(false);
+      // DON'T clear playingChapter here - we need it to resume
+      forceUpdate({});
     };
 
     // Add time update listener for progress
     audio.ontimeupdate = () => {
       setCurrentTime(audio.currentTime);
       // Update tracking progress
-      const [bookId, chapterId, verseId] = audioKey.split('-');
+      const { bookId, chapterId, verseId } = parseAudioKey(audioKey);
       updatePlaybackProgress(
         bookId, 
         parseInt(chapterId), 
@@ -323,7 +429,9 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
       console.log('🎵 Audio.play() promise resolved - setting isPlaying to TRUE');
       setIsPlaying(true);
       setAudioLoading(false);
+      setIsTransitioning(false);
     }).catch(error => {
+      setIsTransitioning(false);
       console.error('Error playing audio:', error);
       console.error('Audio path attempted:', audioPath);
       setIsPlaying(false);
@@ -378,29 +486,25 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
       setDuration(0);
       
       // Track that audio has finished for this chapter
-      const parts = audioKey.split('-');
-      const bookId = parts[0];
-      const chapterId = parts[1];
-      const verseId = parts[2]; // This will be undefined for chapter audio
+      const { bookId, chapterId, verseId } = parseAudioKey(audioKey);
       
       // Check if this is a full chapter audio (not a verse)
-      // For chapter audio like "genesis-2", there are only 2 parts
-      // For verse audio like "genesis-2-5", there are 3 parts
-      if (parts.length === 2) {
+      if (!verseId) {
         const chapterKey = audioKey;
-        console.log('🎵 Audio finished for chapter:', chapterKey, 'verseId:', verseId);
-        setAudioFinishedChapters(prev => {
-          const newSet = new Set([...prev, chapterKey]);
-          console.log('🎵 Updated audioFinishedChapters:', Array.from(newSet));
-          return newSet;
-        });
+        console.log('🎵 Audio finished for chapter:', chapterKey);
         
-        // Show audio finished message
-        showInfo(
-          'Audio Finished!',
-          `You've finished listening to ${bookId} Chapter ${chapterId}. Click "Mark as Complete" below if you want to mark it as complete.`
+        // Automatically mark chapter as complete
+        markCompleted(bookId, parseInt(chapterId), undefined, selectedReader);
+        
+        // Track chapter completion event
+        trackChapterComplete(bookId, parseInt(chapterId), selectedReader);
+        
+        // Show completion message
+        showSuccess(
+          'Chapter Complete!',
+          `You've finished listening to ${bookId} Chapter ${chapterId}. It has been marked as complete. Great job!`
         );
-      } else if (parts.length === 3) {
+      } else {
         showSuccess(
           'Verse Completed!',
           `You've completed ${bookId} Chapter ${chapterId}, Verse ${verseId}.`
@@ -410,12 +514,21 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
 
     // Handle audio error
     audio.onerror = (error) => {
-      console.error('Audio playback error:', error);
-      console.error('Failed to load audio file:', audioPath);
+      console.error('❌ Audio playback error:', error);
+      console.error('❌ Failed to load audio file:', audioPath);
+      console.error('❌ Full URL attempted:', cacheBustPath);
+      console.error('❌ Audio key:', audioKey);
+      
       setIsPlaying(false);
       setPlayingChapter(null);
       setPlayingVerse(null);
       setCurrentAudio(null);
+      
+      // Show user-friendly error message with troubleshooting info
+      showError(
+        'Audio file unavailable',
+        `Could not load audio. Please check:\n1. File exists at: ${audioPath}\n2. CORS is configured on GCP bucket\n3. File is publicly accessible`
+      );
     };
   };
 
@@ -425,21 +538,56 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
     { id: 'heartsease', name: 'Heartsease', avatar: '/presets/Preset4.jpg' }
   ];
 
-  // Save note function
-  const saveNote = () => {
-    if (note.trim() && book) {
-      const id = Date.now().toString();
-      const text = note.trim();
-      const newNotes = { ...savedNotes, [id]: text };
-      setSavedNotes(newNotes);
+  // Save chapter-specific note
+  const saveChapterNote = async (chapterId: number) => {
+    if (!book) return;
+    const chapterKey = `${book.id}-${chapterId}`;
+    const text = chapterNotes.get(chapterKey) || '';
+    
+    if (text.trim()) {
+      const id = `${chapterKey}-${Date.now()}`;
+      const noteRecord: UserNoteRecord = {
+        id,
+        bookId: book.id,
+        chapterId,
+        text: text.trim(),
+        createdAt: new Date().toISOString()
+      };
+      
       if (user) {
-        saveUserNote(user.uid, book.id, id, text).catch(() => {});
+        await saveUserNote(user.uid, book.id, chapterId, id, text.trim()).catch(() => {});
       } else if (typeof window !== 'undefined') {
-        localStorage.setItem(`asmrts_notes_${book.id}`, JSON.stringify(newNotes));
+        const existingNotes = localStorage.getItem(`asmrts_notes_all`);
+        const allNotes: UserNoteRecord[] = existingNotes ? JSON.parse(existingNotes) : [];
+        allNotes.push(noteRecord);
+        localStorage.setItem(`asmrts_notes_all`, JSON.stringify(allNotes));
       }
-      setNote('');
-      showSuccess('Note Saved!', 'Your note has been saved successfully.');
+      
+      setSavedNotes(prev => [...prev, noteRecord]);
+      setChapterNotes(prev => {
+        const newMap = new Map(prev);
+        newMap.delete(chapterKey);
+        return newMap;
+      });
+      showSuccess('Note Saved!', `Your note for Chapter ${chapterId} has been saved.`);
     }
+  };
+
+  const deleteNote = async (noteId: string) => {
+    if (user) {
+      await deleteUserNote(user.uid, noteId).catch(() => {});
+    } else if (typeof window !== 'undefined') {
+      const existingNotes = localStorage.getItem(`asmrts_notes_all`);
+      const allNotes: UserNoteRecord[] = existingNotes ? JSON.parse(existingNotes) : [];
+      const filtered = allNotes.filter(n => n.id !== noteId);
+      localStorage.setItem(`asmrts_notes_all`, JSON.stringify(filtered));
+    }
+    setSavedNotes(prev => prev.filter(n => n.id !== noteId));
+  };
+
+  // Save note function (legacy)
+  const saveNote = () => {
+    // Deprecated - use saveChapterNote instead
   };
 
   // Clear note function
@@ -449,14 +597,11 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
 
   // Load exact durations for available chapters
   const loadExactDurations = async (bookId: string, preset: string) => {
-    // Only load if book has audio
-    if (!(bookId === 'genesis')) return;
-    
     const durations = new Map<string, string>();
     
-    // Load durations for Genesis chapters 1-24 (available in GCP)
-    for (let chapterId = 1; chapterId <= 24; chapterId++) {
+    // Load durations for Genesis chapters 1-50 (available in GCP)
       if (bookId === 'genesis') {
+      for (let chapterId = 1; chapterId <= 50; chapterId++) {
         try {
           const duration = await getAudioDuration(bookId, chapterId, preset);
           if (duration) {
@@ -468,6 +613,22 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
         }
       }
     }
+    
+    // Load duration for Jude chapter 1 (available in GCP)
+    if (bookId === 'jude') {
+      try {
+        const duration = await getAudioDuration(bookId, 1, preset);
+        if (duration) {
+          durations.set(`${bookId}-1`, duration.formatted);
+          console.log(`Loaded duration for ${bookId} Chapter 1: ${duration.formatted}`);
+        }
+      } catch (error) {
+        console.warn(`Failed to load duration for ${bookId} Chapter 1:`, error);
+      }
+    }
+    
+    // Note: 2 John and 3 John only have verse-by-verse audio, not full chapter audio
+    // So we don't load durations for them here
     
     setExactDurations(durations);
   };
@@ -695,7 +856,7 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
                         {chapter.title}
                       </h3>
                       <div className="flex items-center gap-4 text-sm text-gray-600">
-                        {(book.id === 'genesis' && chapter.id >= 1 && chapter.id <= 24) && (
+                        {hasAudioAvailable(book.id, chapter.id) && (
                           <span className="flex items-center gap-1">
                             <Clock className="w-4 h-4" />
                             {exactDurations.get(`${book.id}-${chapter.id}`) || chapter.duration}
@@ -704,127 +865,160 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
                         <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                           (() => {
                             const trackingStatus = getCompletionStatus(book.id, chapter.id, selectedReader);
-                            const hasAudio = (book.id === 'genesis' && chapter.id >= 1 && chapter.id <= 24);
+                            const hasAudio = hasAudioAvailable(book.id, chapter.id);
+                            const hasVerseAudio = hasVerseAudioAvailable(book.id, chapter.id);
                             
                             if (trackingStatus.status === 'completed') return 'bg-green-100 text-green-800';
                             if (trackingStatus.status === 'in-progress') return 'bg-yellow-100 text-yellow-800';
                             if (chapter.status === 'error') return 'bg-red-100 text-red-800';
-                            if (!hasAudio) return 'bg-gray-100 text-gray-600';
+                            if (!hasAudio && !hasVerseAudio) return 'bg-gray-100 text-gray-600';
+                            if (!hasAudio && hasVerseAudio) return 'bg-purple-100 text-purple-800';
                             return 'bg-blue-100 text-blue-800';
                           })()
                         }`}>
                           {(() => {
                             const trackingStatus = getCompletionStatus(book.id, chapter.id, selectedReader);
-                            const hasAudio = (book.id === 'genesis' && chapter.id >= 1 && chapter.id <= 24);
+                            const hasAudio = hasAudioAvailable(book.id, chapter.id);
+                            const hasVerseAudio = hasVerseAudioAvailable(book.id, chapter.id);
                             
                             if (trackingStatus.status === 'completed') return '✓ Completed';
                             if (trackingStatus.status === 'in-progress') return '⏳ In Progress';
                             if (chapter.status === 'error') return '✗ Error';
-                            if (!hasAudio) return '🔇 No Audio';
+                            if (!hasAudio && !hasVerseAudio) return '🔇 No Audio';
+                            if (!hasAudio && hasVerseAudio) return '🎵 Verse Audio';
                             return 'Available';
                           })()}
                         </span>
                       </div>
-                      
-                      {/* Progress Bar - Show when this chapter is playing or has progress */}
+                    </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                    {/* Add Note Button */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setNoteInputChapter(noteInputChapter === chapter.id ? null : chapter.id);
+                      }}
+                      className={`w-8 h-8 ${noteInputChapter === chapter.id ? 'bg-purple-500' : 'bg-blue-500 hover:bg-blue-600'} text-white rounded-full transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-110 flex items-center justify-center text-lg font-bold`}
+                      title="Add note"
+                    >
+                      {noteInputChapter === chapter.id ? '−' : '+'}
+                    </button>
+                    
+                    {/* Mark as Complete Button - Show when not completed */}
                       {(() => {
                         const trackingStatus = getCompletionStatus(book.id, chapter.id, selectedReader);
-                        const isPlaying = (playingChapter === `${book.id}-${chapter.id}` || playingVerse?.startsWith(`${book.id}-${chapter.id}`)) && duration > 0;
-                        const hasProgress = trackingStatus.progress > 0;
-                        
-                        if (isPlaying || hasProgress) {
+                      if (trackingStatus.status !== 'completed') {
                           return (
-                            <div className="mt-3">
-                              <div className="flex items-center gap-2 text-xs text-gray-500 mb-1">
-                                <span>
-                                  {isPlaying 
-                                    ? `${Math.floor(currentTime / 60)}:${(currentTime % 60).toFixed(0).padStart(2, '0')}`
-                                    : `${Math.floor(trackingStatus.progress)}%`
-                                  }
-                                </span>
-                                <div className="flex-1 bg-gray-200 rounded-full h-1">
-                                  <div 
-                                    className={`h-1 rounded-full transition-all duration-100 ${
-                                      trackingStatus.status === 'completed' 
-                                        ? 'bg-green-500' 
-                                        : 'bg-purple-500'
-                                    }`}
-                                    style={{ 
-                                      width: `${isPlaying 
-                                        ? (currentTime / duration) * 100 
-                                        : trackingStatus.progress
-                                      }%` 
-                                    }}
-                                  ></div>
-                                </div>
-                                <span>
-                                  {isPlaying 
-                                    ? `${Math.floor(duration / 60)}:${(duration % 60).toFixed(0).padStart(2, '0')}`
-                                    : '100%'
-                                  }
-                                </span>
-                              </div>
-                            </div>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation(); // Prevent expanding/collapsing when clicking button
+                              markCompleted(book.id, chapter.id, undefined, selectedReader);
+                              trackChapterComplete(book.id, chapter.id, selectedReader);
+                              showSuccess(
+                                'Chapter Marked Complete!',
+                                `You've marked ${book.title} Chapter ${chapter.id} as complete. Great job!`
+                              );
+                            }}
+                            className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white text-sm font-medium rounded-lg transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105 flex items-center gap-1"
+                          >
+                            <span>✓</span>
+                            <span className="hidden sm:inline">Complete</span>
+                          </button>
                           );
                         }
                         return null;
                       })()}
-                    </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                    <div onClick={(e) => e.stopPropagation()}>
-                      {(() => {
-                        const chapterKey = `${book.id}-${chapter.id}`;
-                        const isThisChapterPlaying = playingChapter === chapterKey && isPlaying;
-                        console.log(`🎯 MAIN Chapter ${chapter.id} button:`, {
-                          chapterKey,
-                          playingChapter,
-                          isPlaying,
-                          isThisChapterPlaying,
-                          'playingChapter === chapterKey': playingChapter === chapterKey
-                        });
-                        return null;
-                      })()}
-                      <SimplePlayButton
-                        key={`main-chapter-${book.id}-${chapter.id}-${playingChapter}-${isPlaying}`}
-                        isPlaying={playingChapter === `${book.id}-${chapter.id}` && isPlaying}
-                        onPlay={() => {
-                          const chapterKey = `${book.id}-${chapter.id}`;
-                          
-                          if (!(book.id === 'genesis' && chapter.id >= 1 && chapter.id <= 24)) {
-                            showWarning(
-                              'Audio Not Available',
-                              `Audio for ${book.id} Chapter ${chapter.id} is not available yet.`
-                            );
-                            return;
-                          }
-                          
-                          ensureAndPlay(selectedReader, book.id, chapter.id, 'chapter');
-                        }}
-                        onPause={() => {
-                          const chapterKey = `${book.id}-${chapter.id}`;
-                          stopAudio();
-                        }}
-                        className={`${
-                          !(book.id === 'genesis' && chapter.id >= 1 && chapter.id <= 24)
-                            ? 'opacity-50 cursor-not-allowed'
-                            : ''
-                        }`}
-                      />
-                    </div>
                     <div className={`transform transition-transform duration-300 ${
                       expandedChapter === chapter.id ? 'rotate-180' : ''
                     }`}>
                       <ArrowRight className="w-5 h-5 text-gray-400" />
                     </div>
-                  </div>
+                    </div>
                 </div>
               </div>
+
+              {/* Note Input Section - Shows when + button is clicked */}
+              {noteInputChapter === chapter.id && (
+                <div className="px-6 py-4 bg-gradient-to-r from-blue-50 to-purple-50 border-t border-blue-100">
+                  <h4 className="text-sm font-semibold text-gray-900 mb-2">
+                    📝 Add Note for Chapter {chapter.id}
+                  </h4>
+                  <textarea
+                    value={chapterNotes.get(`${book.id}-${chapter.id}`) || ''}
+                    onChange={(e) => {
+                        const chapterKey = `${book.id}-${chapter.id}`;
+                      setChapterNotes(prev => {
+                        const newMap = new Map(prev);
+                        newMap.set(chapterKey, e.target.value);
+                        return newMap;
+                      });
+                    }}
+                    placeholder="Write your thoughts and insights about this chapter..."
+                    className="w-full h-32 p-3 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
+                  />
+                  <div className="flex items-center gap-3 mt-3">
+                    <button
+                      onClick={async () => {
+                          const chapterKey = `${book.id}-${chapter.id}`;
+                        const text = chapterNotes.get(chapterKey) || '';
+                        
+                        if (text.trim()) {
+                          const id = `${book.id}-${chapter.id}-${Date.now()}`;
+                          const noteRecord: UserNoteRecord = {
+                            id,
+                            bookId: book.id,
+                            chapterId: chapter.id,
+                            text: text.trim(),
+                            createdAt: new Date().toISOString()
+                          };
+                          
+                          if (user) {
+                            await saveUserNote(user.uid, book.id, chapter.id, id, text.trim()).catch(() => {});
+                          } else if (typeof window !== 'undefined') {
+                            const existingNotes = localStorage.getItem(`asmrts_notes_all`);
+                            const allNotes: UserNoteRecord[] = existingNotes ? JSON.parse(existingNotes) : [];
+                            allNotes.push(noteRecord);
+                            localStorage.setItem(`asmrts_notes_all`, JSON.stringify(allNotes));
+                          }
+                          
+                          setSavedNotes(prev => [...prev, noteRecord]);
+                          setChapterNotes(prev => {
+                            const newMap = new Map(prev);
+                            newMap.delete(chapterKey);
+                            return newMap;
+                          });
+                          setNoteInputChapter(null);
+                          showSuccess('Note Saved!', `Your note for Chapter ${chapter.id} has been saved.`);
+                        }
+                      }}
+                      className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm font-medium"
+                    >
+                      Save Note
+                    </button>
+                    <button
+                      onClick={() => {
+                          const chapterKey = `${book.id}-${chapter.id}`;
+                        setChapterNotes(prev => {
+                          const newMap = new Map(prev);
+                          newMap.delete(chapterKey);
+                          return newMap;
+                        });
+                        setNoteInputChapter(null);
+                      }}
+                      className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-sm"
+                    >
+                      Cancel
+                    </button>
+                    </div>
+                    </div>
+              )}
 
               {/* Expanded Content */}
               {expandedChapter === chapter.id && (
                 <div className="border-t border-purple-100 bg-gradient-to-b from-white to-purple-25">
-                  {/* Full Chapter Audio Player */}
+                  {/* Full Chapter Audio Player - Only show if chapter audio is available */}
+                  {hasAudioAvailable(book.id, chapter.id) && (
                   <div className="p-6 border-b border-purple-100">
                     <div className="bg-gradient-to-r from-gray-800 to-gray-900 rounded-xl p-4 shadow-lg">
                       <div className="text-center mb-3">
@@ -835,87 +1029,150 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
                       <div className="flex items-center gap-3">
                         {/* Play Button - Left aligned */}
                         <SimplePlayButton
-                          key={`expanded-chapter-${book.id}-${chapter.id}-${playingChapter}-${isPlaying}`}
-                          isPlaying={playingChapter === `${book.id}-${chapter.id}` && isPlaying}
-                          onPlay={() => {
+                          key={`expanded-chapter-${book.id}-${chapter.id}-${playingChapter}-${isPlaying}-${currentAudio?.paused}`}
+                          isPlaying={(() => {
                             const chapterKey = `${book.id}-${chapter.id}`;
-                            const audioPath = getAudioPath(selectedReader, book.id, chapter.id, 'chapter');
-                            playAudio(audioPath, chapterKey);
+                            // Check if this chapter's audio is currently loaded and playing
+                            const isThisChapterAudio = currentAudio?.src && currentAudio.src.includes(`chapter${chapter.id}/chapter${chapter.id}.mp3`);
+                            const result = !!(isThisChapterAudio && currentAudio && !currentAudio.paused && !isTransitioning);
+                            return result;
+                          })()}
+                          onPlay={async () => {
+                            if (isTransitioning) return;
+                            const chapterKey = `${book.id}-${chapter.id}`;
+                            const expectedAudioPath = getAudioPath(selectedReader, book.id, chapter.id, 'chapter');
+                            
+                            console.log('🎯 onPlay clicked:', { 
+                              chapterKey, 
+                              playingChapter, 
+                              hasAudio: !!currentAudio, 
+                              audioPaused: currentAudio?.paused,
+                              audioSrc: currentAudio?.src,
+                              expectedPath: expectedAudioPath
+                            });
+                            
+                            // Check if the current audio is for this chapter (ignore query params)
+                            const isThisChapterAudio = currentAudio?.src && currentAudio.src.includes(`chapter${chapter.id}/chapter${chapter.id}.mp3`);
+                            
+                            // If same audio is loaded but paused, just resume
+                            if (currentAudio && isThisChapterAudio && currentAudio.paused) {
+                              console.log('🎯 Resuming existing audio for this chapter');
+                              setIsTransitioning(true);
+                              try {
+                                await currentAudio.play();
+                                setIsPlaying(true);
+                                setPlayingChapter(chapterKey); // Re-set playingChapter
+                                setPlayingVerse(null);
+                                forceUpdate({});
+                              } catch (err) {
+                                console.error('Play error:', err);
+                              } finally {
+                                setIsTransitioning(false);
+                              }
+                            } else if (currentAudio && isThisChapterAudio && !currentAudio.paused) {
+                              console.log('🎯 Audio already playing for this chapter, pausing it');
+                              currentAudio.pause();
+                              setIsPlaying(false);
+                              forceUpdate({});
+                            } else {
+                              console.log('🎯 Loading new audio');
+                              // Load new audio
+                              playAudio(expectedAudioPath, chapterKey);
+                            }
                           }}
                           onPause={() => {
-                            const chapterKey = `${book.id}-${chapter.id}`;
-                            stopAudio();
+                            if (isTransitioning) return;
+                            if (currentAudio && !currentAudio.paused) {
+                              setIsTransitioning(true);
+                              currentAudio.pause();
+                              setIsPlaying(false);
+                              forceUpdate({});
+                              setTimeout(() => setIsTransitioning(false), 100);
+                            }
                           }}
                           className="!p-0 w-12 h-12 !flex !items-center !justify-center"
                         />
-                        
                         {/* Time */}
-                        <span className="text-white text-xs font-mono">0:00</span>
-                        
-                        {/* Progress Bar */}
-                        <div className="flex-1">
-                          <div className="w-full bg-gray-600 rounded-full h-2">
-                            <div className="bg-gradient-to-r from-purple-400 to-blue-400 h-2 rounded-full w-0 relative">
-                              <div className="absolute right-0 top-1/2 transform -translate-y-1/2 w-3 h-3 bg-white rounded-full border-2 border-purple-400 shadow-md"></div>
+                        <span className="text-white text-xs font-mono" style={{ width: 48, textAlign: 'right' }}>
+                          {duration > 0 && (playingChapter === `${book.id}-${chapter.id}` || (playingVerse?.startsWith(`${book.id}-${chapter.id}`) ?? false))
+                            ? `${Math.floor((isSeeking && seekPercent !== null ? seekPercent * duration : currentTime) / 60)}:${((isSeeking && seekPercent !== null ? seekPercent * duration : currentTime) % 60).toFixed(0).padStart(2, '0')}`
+                            : '0:00'}
+                        </span>
+                        {/* Progress Bar (draggable/clickable) */}
+                        <div className="flex-1" style={{ minWidth: 0 }}>
+                          <div
+                            className="w-full bg-gray-600 rounded-full h-2 relative cursor-pointer group"
+                            style={{ position: 'relative', userSelect: 'none' }}
+                            onMouseDown={e => {
+                              if (!(playingChapter === `${book.id}-${chapter.id}` && duration > 0 && currentAudio)) return;
+                              e.preventDefault();
+                              const bar = e.currentTarget;
+                              const barRect = bar.getBoundingClientRect();
+                              
+                              const updateSeek = (clientX: number) => {
+                                const x = clientX - barRect.left;
+                                const percent = Math.max(0, Math.min(x / barRect.width, 1));
+                                setSeekPercent(percent);
+                              };
+                              
+                              const handleMouseMove = (e: MouseEvent) => {
+                                updateSeek(e.clientX);
+                              };
+                              
+                              const handleMouseUp = (e: MouseEvent) => {
+                                const x = e.clientX - barRect.left;
+                                const percent = Math.max(0, Math.min(x / barRect.width, 1));
+                                currentAudio.currentTime = percent * duration;
+                                setSeekPercent(null);
+                                setIsSeeking(false);
+                                document.removeEventListener('mousemove', handleMouseMove);
+                                document.removeEventListener('mouseup', handleMouseUp);
+                              };
+                              
+                              setIsSeeking(true);
+                              updateSeek(e.clientX);
+                              document.addEventListener('mousemove', handleMouseMove);
+                              document.addEventListener('mouseup', handleMouseUp);
+                            }}
+                            onTouchStart={e => {
+                              if (!(playingChapter === `${book.id}-${chapter.id}` && duration > 0 && currentAudio)) return;
+                              setIsSeeking(true);
+                              const bar = e.currentTarget.getBoundingClientRect();
+                              const x = e.touches[0].clientX - bar.left;
+                              const percent = Math.max(0, Math.min(x / bar.width, 1));
+                              setSeekPercent(percent);
+                            }}
+                            onTouchMove={e => {
+                              if (!isSeeking || !(playingChapter === `${book.id}-${chapter.id}` && duration > 0 && currentAudio)) return;
+                              const bar = e.currentTarget.getBoundingClientRect();
+                              const x = e.touches[0].clientX - bar.left;
+                              const percent = Math.max(0, Math.min(x / bar.width, 1));
+                              setSeekPercent(percent);
+                            }}
+                            onTouchEnd={e => {
+                              if (!(playingChapter === `${book.id}-${chapter.id}` && duration > 0 && currentAudio)) return;
+                              setIsSeeking(false);
+                              if (seekPercent !== null) {
+                                currentAudio.currentTime = seekPercent * duration;
+                                setSeekPercent(null);
+                              }
+                            }}
+                          >
+                            <div className="h-2 bg-gradient-to-r from-purple-400 to-blue-400 rounded-full transition-all" style={{ width: `${(duration > 0 && (playingChapter === `${book.id}-${chapter.id}` || (playingVerse?.startsWith(`${book.id}-${chapter.id}`) ?? false)) ? (isSeeking && seekPercent !== null ? seekPercent : (currentTime / duration)) : 0) * 100}%` }}>
+                              <div className="absolute right-0 top-1/2 transform -translate-y-1/2 w-3 h-3 bg-white rounded-full border-2 border-purple-400 shadow-md" style={{ left: 'auto', right: -6 }}></div>
                             </div>
                           </div>
                         </div>
-                        
                         {/* Duration */}
-                        {(book.id === 'genesis' && chapter.id >= 1 && chapter.id <= 24) && (
-                          <span className="text-white text-xs font-mono">{exactDurations.get(`${book.id}-${chapter.id}`) || chapter.duration}</span>
+                        {hasAudioAvailable(book.id, chapter.id) && (
+                          <span className="text-white text-xs font-mono" style={{ width: 48, textAlign: 'left' }}>
+                            {duration > 0 ? `${Math.floor(duration / 60)}:${(duration % 60).toFixed(0).padStart(2, '0')}` : (exactDurations.get(`${book.id}-${chapter.id}`) || chapter.duration)}
+                          </span>
                         )}
               </div>
             </div>
-
-
-                    {/* Mark as Complete Button - Only show after audio finishes */}
-                    {(() => {
-                      const chapterKey = `${book.id}-${chapter.id}`;
-                      const trackingStatus = getCompletionStatus(book.id, chapter.id, selectedReader);
-                      const hasAudioFinished = audioFinishedChapters.has(chapterKey);
-                      
-                      console.log('🔍 Mark Complete Button Check:', {
-                        chapterKey,
-                        hasAudioFinished,
-                        trackingStatus: trackingStatus.status,
-                        audioFinishedChapters: Array.from(audioFinishedChapters),
-                        shouldShowButton: hasAudioFinished && trackingStatus.status !== 'completed'
-                      });
-                      
-                      
-                      if (hasAudioFinished && trackingStatus.status !== 'completed') {
-                        return (
-                          <div className="mt-4 text-center">
-                            <button 
-                              className="px-6 py-3 bg-green-500 hover:bg-green-600 text-white font-medium rounded-lg transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105"
-                              onClick={() => {
-                                if (!book) return;
-                                markCompleted(book.id, chapter.id, undefined, selectedReader);
-                                
-                                // Track chapter completion event
-                                trackChapterComplete(book.id, chapter.id, selectedReader);
-                                
-                                showSuccess(
-                                  'Chapter Marked Complete!',
-                                  `You've marked ${book.title} Chapter ${chapter.id} as complete. Great job!`
-                                );
-                                // Remove from audio finished list since it's now completed
-                                setAudioFinishedChapters(prev => {
-                                  const newSet = new Set(prev);
-                                  newSet.delete(chapterKey);
-                                  return newSet;
-                                });
-                              }}
-                            >
-                              ✓ Mark as Complete
-                            </button>
-                          </div>
-                        );
-                      }
-                      return null;
-                    })()}
                   </div>
+                  )}
 
                   {/* Verse-by-Verse Content */}
                   <div className="p-6">
@@ -996,69 +1253,36 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
           ))}
             </div>
 
-          {/* Notes Section - At the end of all chapters */}
-          <div className="mt-6 bg-white rounded-lg shadow-sm border border-gray-200">
-            <div className="p-4">
-              <h3 className="text-lg font-semibold text-gray-900 mb-3">My Notes:</h3>
-              <textarea
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                placeholder="Add your thoughts and insights about the chapters..."
-                className="w-full h-32 p-3 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-              />
-              <div className="flex items-center gap-3 mt-3">
-                <button 
-                  onClick={saveNote}
-                  className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm"
-                >
-                  Save Note
-                </button>
-                <button 
-                  onClick={clearNote}
-                  className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-sm"
-                >
-                  Clear
-                </button>
-              </div>
-              </div>
-            </div>
-
-          {/* Saved Notes Display */}
-          {Object.keys(savedNotes).length > 0 && (
+          {/* Saved Notes Display - Below all chapters */}
+          {savedNotes.length > 0 && (
             <div className="mt-6 bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg shadow-sm border border-purple-200">
               <div className="p-4">
                 <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
                   <span className="text-purple-600">📝</span>
-                  Saved Notes
+                  My Notes ({savedNotes.length})
                 </h3>
                 <div className="space-y-3">
-                  {Object.entries(savedNotes)
-                    .sort(([a], [b]) => parseInt(b) - parseInt(a)) // Show newest first
-                    .map(([timestamp, noteText]) => (
-                      <div key={timestamp} className="bg-white rounded-lg p-3 border border-gray-200">
+                  {savedNotes.map((note) => (
+                    <div key={note.id} className="bg-white rounded-lg p-4 border border-gray-200 shadow-sm">
                         <div className="flex justify-between items-start mb-2">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="font-semibold text-purple-600 text-sm">
+                              {book?.title} - Chapter {note.chapterId}
+                            </span>
+                          </div>
                           <span className="text-xs text-gray-500">
-                            {new Date(parseInt(timestamp)).toLocaleDateString()} at {new Date(parseInt(timestamp)).toLocaleTimeString()}
+                            {new Date(note.createdAt).toLocaleDateString()} at {new Date(note.createdAt).toLocaleTimeString()}
                           </span>
+                        </div>
                           <button
-                            onClick={() => {
-                              const newNotes = { ...savedNotes };
-                              delete newNotes[timestamp];
-                              setSavedNotes(newNotes);
-                              if (book) {
-                                if (user) {
-                                  deleteUserNote(user.uid, book.id, timestamp).catch(() => {});
-                                } else if (typeof window !== 'undefined') {
-                                  localStorage.setItem(`asmrts_notes_${book.id}`, JSON.stringify(newNotes));
-                                }
-                              }
-                            }}
-                            className="text-red-500 hover:text-red-700 text-xs"
+                          onClick={() => deleteNote(note.id)}
+                          className="text-red-500 hover:text-red-700 text-sm font-medium px-2 py-1 rounded hover:bg-red-50 transition-colors"
                           >
                             Delete
                           </button>
                         </div>
-                        <p className="text-gray-700 text-sm">{noteText}</p>
+                      <p className="text-gray-700 text-sm mt-2 whitespace-pre-wrap">{note.text}</p>
                       </div>
                     ))}
                   </div>

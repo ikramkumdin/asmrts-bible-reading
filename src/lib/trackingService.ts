@@ -394,8 +394,8 @@ class TrackingService {
 
   // Check if audio is available based on file structure
   isAudioAvailable(bookId: string, chapterId: number, preset: string): boolean {
-    // Genesis chapters 1-24 are now available for both presets (GCP bucket)
-    if (bookId === 'genesis' && chapterId >= 1 && chapterId <= 24) {
+    // Genesis chapters 1-50 are now available for both presets (aria and heartsease) in GCP bucket
+    if (bookId === 'genesis' && chapterId >= 1 && chapterId <= 50) {
       console.log(`Audio check: ${bookId} Chapter ${chapterId} with ${preset} = Available`);
       return true;
     }

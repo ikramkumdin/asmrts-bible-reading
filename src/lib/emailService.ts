@@ -29,6 +29,18 @@ export async function subscribeToEmail(data: SubscriptionData): Promise<EmailRes
   }
 }
 
+export interface DailyReminderData {
+  email: string;
+  asmrModel: 'aria' | 'heartsease';
+  deliveryType: 'unfinished' | 'whole';
+  chapterLabel?: string; // e.g., John Chapter 3
+  progressPercent?: number; // 0-100
+  quoteText?: string;
+  quoteRef?: string;
+  buttonUrl?: string;
+  ctaText?: string;
+}
+
 // Alternative email service using a simple API
 async function sendEmailViaAPI(data: SubscriptionData): Promise<void> {
   console.log('📧 Calling /api/send-email with data:', data);
@@ -60,6 +72,36 @@ async function sendEmailViaAPI(data: SubscriptionData): Promise<void> {
   
   const result = await response.json();
   console.log('📧 API success response:', result);
+}
+
+// Send a single daily reminder email now (client helper)
+export async function sendDailyReminderEmail(reminder: DailyReminderData): Promise<EmailResponse> {
+  const response = await fetch('/api/send-email', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      to: reminder.email,
+      subject: 'Your daily ASMR Bible reminder',
+      template: 'dailyReminder',
+      data: {
+        asmrModel: reminder.asmrModel,
+        deliveryType: reminder.deliveryType,
+        chapterLabel: reminder.chapterLabel,
+        progressPercent: reminder.progressPercent,
+        quoteText: reminder.quoteText,
+        quoteRef: reminder.quoteRef,
+        buttonUrl: reminder.buttonUrl,
+        ctaText: reminder.ctaText,
+      }
+    })
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    return { success: false, message: `Failed to send reminder: ${errorText}` };
+  }
+
+  return { success: true, message: 'Reminder email sent' };
 }
 
 // Save subscription to localStorage (temporary solution)

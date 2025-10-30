@@ -58,6 +58,8 @@ export default function AdvancedAudioPlayer({
   const [showSettings, setShowSettings] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragPercent, setDragPercent] = useState<number | null>(null);
   const progressRef = useRef<HTMLDivElement>(null);
 
   const formatTime = (seconds: number) => {
@@ -66,16 +68,42 @@ export default function AdvancedAudioPlayer({
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const handleProgressClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!progressRef.current || mode === 'auth') return;
-    
+  const getPercentFromClientX = (clientX: number) => {
+    if (!progressRef.current) return 0;
     const rect = progressRef.current.getBoundingClientRect();
-    const clickX = e.clientX - rect.left;
-    const width = rect.width;
-    const percentage = clickX / width;
-    const newTime = percentage * duration;
-    
+    const x = Math.max(0, Math.min(rect.width, clientX - rect.left));
+    return x / rect.width;
+  };
+
+  const commitSeekFromPercent = (percent: number) => {
+    const clamped = Math.max(0, Math.min(1, percent));
+    const newTime = clamped >= 0.999 ? duration : clamped * duration;
     onSeek?.(newTime);
+  };
+
+  const handleProgressClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (mode === 'auth') return;
+    const pct = getPercentFromClientX(e.clientX);
+    commitSeekFromPercent(pct);
+  };
+
+  const handleDragStart = (clientX: number) => {
+    if (mode === 'auth') return;
+    setIsDragging(true);
+    setDragPercent(getPercentFromClientX(clientX));
+  };
+
+  const handleDragMove = (clientX: number) => {
+    if (!isDragging) return;
+    setDragPercent(getPercentFromClientX(clientX));
+  };
+
+  const handleDragEnd = () => {
+    if (!isDragging) return;
+    const percent = dragPercent ?? 0;
+    setIsDragging(false);
+    commitSeekFromPercent(percent);
+    setDragPercent(null);
   };
 
   const handleSkipBack = () => {
@@ -126,10 +154,17 @@ export default function AdvancedAudioPlayer({
             ref={progressRef}
             className="w-full h-2 bg-gray-200 rounded-full cursor-pointer hover:h-3 transition-all duration-200"
             onClick={handleProgressClick}
+            onMouseDown={(e) => handleDragStart(e.clientX)}
+            onMouseMove={(e) => isDragging && handleDragMove(e.clientX)}
+            onMouseUp={handleDragEnd}
+            onMouseLeave={handleDragEnd}
+            onTouchStart={(e) => handleDragStart(e.touches[0].clientX)}
+            onTouchMove={(e) => handleDragMove(e.touches[0].clientX)}
+            onTouchEnd={handleDragEnd}
           >
             <div 
               className="h-full bg-gradient-to-r from-purple-500 to-blue-500 rounded-full relative"
-              style={{ width: `${duration > 0 ? (currentTime / duration) * 100 : 0}%` }}
+              style={{ width: `${duration > 0 ? ((isDragging && dragPercent !== null) ? dragPercent * 100 : (currentTime / duration) * 100) : 0}%` }}
             >
               <div className="absolute right-0 top-1/2 transform -translate-y-1/2 w-4 h-4 bg-white rounded-full shadow-md border-2 border-purple-500"></div>
             </div>
