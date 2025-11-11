@@ -178,37 +178,35 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
     type: 'chapter' | 'verse',
     verseNumber?: number
   ) => {
-    const primaryPath = getAudioPath(preset, bookId, chapterId, type, verseNumber);
     console.log('🎵 ensureAndPlay called:', { preset, bookId, chapterId, type, verseNumber });
-    console.log('🎵 Generated path:', primaryPath);
     
-    try {
-      const headResp = await fetch(primaryPath, { method: 'HEAD' });
-      if (headResp.ok) {
-        const key = type === 'chapter' ? `${bookId}-${chapterId}` : `${bookId}-${chapterId}-${verseNumber}`;
-        console.log('🎵 File exists, calling playAudio with key:', key);
-        playAudio(primaryPath, key);
+    // For verse audio, try to play it directly - if it fails, fall back to chapter audio
+    if (type === 'verse') {
+      const versePath = getAudioPath(preset, bookId, chapterId, 'verse', verseNumber);
+      const verseKey = `${bookId}-${chapterId}-${verseNumber}`;
+      console.log('🎵 Attempting to play verse audio:', versePath);
+      
+      // Try to play verse audio directly - playAudio now allows verse audio without availability check
+      // If the file doesn't exist, the audio element's error handler in playAudio will catch it
+      // and automatically fall back to chapter audio
+      playAudio(versePath, verseKey);
+      return;
+    }
+    
+    // For chapter audio, check availability and play
+    if (type === 'chapter') {
+      const hasChapterAudio = hasAudioAvailable(bookId, chapterId);
+      
+      if (hasChapterAudio) {
+        const chapterPath = getAudioPath(preset, bookId, chapterId, 'chapter');
+        console.log('🎵 Chapter audio available, playing:', chapterPath);
+        playAudio(chapterPath, `${bookId}-${chapterId}`);
+        return;
+      } else {
+        showWarning('Audio Not Available', `Audio for ${bookId} Chapter ${chapterId} is not available yet.`);
         return;
       }
-    } catch (_) {
-      // ignore and try fallback below
     }
-
-    if (type === 'verse') {
-      const chapterPath = getAudioPath(preset, bookId, chapterId, 'chapter');
-      try {
-        const headChapter = await fetch(chapterPath, { method: 'HEAD' });
-        if (headChapter.ok) {
-          playAudio(chapterPath, `${bookId}-${chapterId}`);
-          showInfo('Verse audio unavailable', 'Playing full chapter audio instead.');
-          return;
-        }
-      } catch (_) {
-        // fall through to warning
-      }
-    }
-
-    showWarning('Audio Not Available', `Audio for ${bookId} Chapter ${chapterId}${type === 'verse' && verseNumber ? ` Verse ${verseNumber}` : ''} is not available yet.`);
   };
 
   // Helper function to parse audio key correctly (handles book IDs with hyphens)
@@ -236,15 +234,26 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
   const hasAudioAvailable = (bookId: string, chapterId: number): boolean => {
     if (bookId === 'genesis' && chapterId >= 1 && chapterId <= 50) return true;
     if (bookId === 'jude' && chapterId === 1) return true;
-    // 2 John and 3 John only have verse-by-verse audio, not full chapter audio
+    if (bookId === '1-john' && chapterId >= 1 && chapterId <= 5) return true;
+    if (bookId === '2-john' && chapterId === 1) return true;
+    if (bookId === '3-john' && chapterId === 1) return true;
+    if (bookId === 'revelation' && chapterId >= 1 && chapterId <= 12) return true;
     return false;
   };
 
   // Helper function to check if verse audio is available
   const hasVerseAudioAvailable = (bookId: string, chapterId: number): boolean => {
+    // Genesis chapters 46-50 have verse-by-verse audio
+    if (bookId === 'genesis' && chapterId >= 46 && chapterId <= 50) return true;
+    // Jude has verse-by-verse audio
+    if (bookId === 'jude' && chapterId === 1) return true;
+    // 1 John chapters 1-5 have verse-by-verse audio
+    if (bookId === '1-john' && chapterId >= 1 && chapterId <= 5) return true;
     // 2 John and 3 John have verse-by-verse audio
     if (bookId === '2-john' && chapterId === 1) return true;
     if (bookId === '3-john' && chapterId === 1) return true;
+    // Revelation chapters 1-12 have verse-by-verse audio
+    if (bookId === 'revelation' && chapterId >= 1 && chapterId <= 12) return true;
     return false;
   };
 
@@ -254,10 +263,12 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
     // Check if audio is available
     const { bookId, chapterId, verseId } = parseAudioKey(audioKey);
     
-    // Check availability based on whether it's verse or chapter audio
+    // For verse audio, skip availability check - let the browser try to load it
+    // If it fails, the error handler in ensureAndPlay will catch it
+    // For chapter audio, still check availability
     const isAvailable = verseId 
-      ? hasVerseAudioAvailable(bookId, parseInt(chapterId))  // Verse audio
-      : hasAudioAvailable(bookId, parseInt(chapterId));       // Chapter audio
+      ? true  // Always allow verse audio - let browser determine if file exists
+      : hasAudioAvailable(bookId, parseInt(chapterId));  // Chapter audio
     
     if (!isAvailable) {
       showWarning(
@@ -351,8 +362,12 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
       setDuration(isFinite(audio.duration) ? audio.duration : 0);
     };
 
+    // Track audio loading state to prevent false error messages
+    let audioLoadedFlag = false;
+
     // Add load event listener
     audio.onloadeddata = () => {
+      audioLoadedFlag = true;
       const actualChapter = audio.src.match(/chapter(\d+)/)?.[1];
       const expectedChapter = audioPath.match(/chapter(\d+)/)?.[1];
       console.log('✅ Audio loaded successfully');
@@ -373,15 +388,37 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
 
     // Add canplay event listener
     audio.oncanplay = () => {
+      audioLoadedFlag = true;
       console.log('Audio can play:', audioPath);
       setAudioLoading(false);
     };
 
-    // Keep currentTime in sync for the progress UI (unless user is seeking)
-    audio.ontimeupdate = () => {
-      if (!isSeeking) {
-        setCurrentTime(audio.currentTime || 0);
+    // Add error handler for verse audio - fall back to chapter audio if verse fails
+    audio.onerror = (e) => {
+      const { bookId, chapterId, verseId } = parseAudioKey(audioKey);
+      
+      // Only handle verse audio errors - let chapter audio errors show normally
+      if (verseId) {
+        console.log('🎵 Verse audio error, falling back to chapter audio');
+        const hasChapterAudio = hasAudioAvailable(bookId, parseInt(chapterId));
+        if (hasChapterAudio) {
+          const chapterPath = getAudioPath(selectedReader, bookId, parseInt(chapterId), 'chapter');
+          console.log('🎵 Playing chapter audio instead:', chapterPath);
+          // Use setTimeout to avoid recursion
+          setTimeout(() => {
+            playAudio(chapterPath, `${bookId}-${chapterId}`);
+            showInfo('Verse audio unavailable', 'Playing full chapter audio instead.');
+          }, 100);
+        } else {
+          showWarning('Audio Not Available', `Audio for ${bookId} Chapter ${chapterId} Verse ${verseId} is not available yet.`);
+        }
+        return;
       }
+      
+      // For chapter audio errors, show normal error
+      console.error('❌ Audio error:', e);
+      setAudioLoading(false);
+      setIsPlaying(false);
     };
 
     // Add play event listener
@@ -404,9 +441,11 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
       forceUpdate({});
     };
 
-    // Add time update listener for progress
+    // Add time update listener for progress (combined handler)
     audio.ontimeupdate = () => {
-      setCurrentTime(audio.currentTime);
+      if (!isSeeking) {
+        setCurrentTime(audio.currentTime || 0);
+      }
       // Update tracking progress
       const { bookId, chapterId, verseId } = parseAudioKey(audioKey);
       updatePlaybackProgress(
@@ -417,11 +456,6 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
         audio.currentTime, 
         audio.duration
       );
-    };
-
-    // Add loaded metadata listener
-    audio.onloadedmetadata = () => {
-      setDuration(audio.duration);
     };
 
     // Play audio
@@ -512,23 +546,92 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
       }
     };
 
-    // Handle audio error
+    // Handle audio error with improved logic to prevent false positives
+    let errorTimeout: ReturnType<typeof setTimeout> | null = null;
+    
     audio.onerror = (error) => {
-      console.error('❌ Audio playback error:', error);
-      console.error('❌ Failed to load audio file:', audioPath);
-      console.error('❌ Full URL attempted:', cacheBustPath);
-      console.error('❌ Audio key:', audioKey);
+      // Clear any pending error timeout
+      if (errorTimeout) {
+        clearTimeout(errorTimeout);
+        errorTimeout = null;
+      }
       
+      // Check the audio element's error state
+      const errorCode = audio.error;
+      
+      // If error is null or 0, there's no actual error (sometimes onerror fires spuriously)
+      if (!errorCode || errorCode.code === 0) {
+        console.log('⚠️ Audio onerror fired but no error code (likely spurious):', audioPath);
+        return;
+      }
+      
+      // If audio has already loaded successfully, don't show error
+      if (audioLoadedFlag) {
+        console.log('⚠️ Error occurred but audio already loaded, ignoring:', audioPath);
+        return;
+      }
+      
+      // MEDIA_ERR_ABORTED (1) can happen during normal loading, ignore it
+      if (errorCode.code === 1) {
+        console.log('⚠️ Audio loading aborted (likely user action or navigation):', audioPath);
+        return;
+      }
+      
+      // Don't clear state if audio has data (might be a transient error)
+      if (audio.readyState >= 2) { // HAVE_CURRENT_DATA or higher
+        console.log('⚠️ Error occurred but audio has data (readyState >= 2), ignoring error');
+        audioLoadedFlag = true;
+        return;
+      }
+      
+      // Add a delay to see if audio loads after error (sometimes errors fire prematurely)
+      // This gives the browser time to actually load the audio
+      errorTimeout = setTimeout(() => {
+        // Check if audio loaded in the meantime
+        if (audioLoadedFlag || audio.readyState >= 2 || audio.networkState === 2) {
+          console.log('⚠️ Audio loaded after error, ignoring error message');
+          return;
+        }
+        
+        // Check error code again - if it's still an error, show the message
+        const currentError = audio.error;
+        if (!currentError || currentError.code === 0 || currentError.code === 1) {
+          console.log('⚠️ Error cleared, audio may have loaded');
+          return;
+        }
+        
+        console.error('❌ Audio playback error (after delay):', error);
+        console.error('❌ Error code:', currentError.code, 'Error message:', currentError.message);
+        console.error('❌ Failed to load audio file:', audioPath);
+        console.error('❌ Full URL attempted:', cacheBustPath);
+        console.error('❌ Audio key:', audioKey);
+        console.error('❌ Audio readyState:', audio.readyState);
+        console.error('❌ Audio networkState:', audio.networkState);
+        
       setIsPlaying(false);
       setPlayingChapter(null);
       setPlayingVerse(null);
       setCurrentAudio(null);
-      
-      // Show user-friendly error message with troubleshooting info
-      showError(
-        'Audio file unavailable',
-        `Could not load audio. Please check:\n1. File exists at: ${audioPath}\n2. CORS is configured on GCP bucket\n3. File is publicly accessible`
-      );
+        setAudioLoading(false);
+        setIsTransitioning(false);
+        
+        // Show user-friendly error message with troubleshooting info
+        let errorMessage = `Could not load audio. Please check:\n1. File exists at: ${audioPath}\n2. CORS is configured on GCP bucket\n3. File is publicly accessible`;
+        
+        // Add specific error details
+        if (currentError.code === 2) {
+          errorMessage += '\n\nError: Network error - Unable to download the audio file.';
+        } else if (currentError.code === 3) {
+          errorMessage += '\n\nError: Decoding error - The audio file format may not be supported.';
+        } else if (currentError.code === 4) {
+          errorMessage += '\n\nError: Source not supported - The audio format is not supported by your browser.';
+        }
+        
+        showError(
+          'Audio file unavailable',
+          errorMessage
+        );
+      }, 1000); // Wait 1 second to see if audio loads
     };
   };
 
@@ -627,8 +730,61 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
       }
     }
     
-    // Note: 2 John and 3 John only have verse-by-verse audio, not full chapter audio
-    // So we don't load durations for them here
+    // Load durations for 1 John chapters 1-5 (available in GCP)
+    if (bookId === '1-john') {
+      for (let chapterId = 1; chapterId <= 5; chapterId++) {
+        try {
+          const duration = await getAudioDuration(bookId, chapterId, preset);
+          if (duration) {
+            durations.set(`${bookId}-${chapterId}`, duration.formatted);
+            console.log(`Loaded duration for ${bookId} Chapter ${chapterId}: ${duration.formatted}`);
+          }
+        } catch (error) {
+          console.warn(`Failed to load duration for ${bookId} Chapter ${chapterId}:`, error);
+        }
+      }
+    }
+    
+    // Load duration for 2 John chapter 1 (available in GCP)
+    if (bookId === '2-john') {
+      try {
+        const duration = await getAudioDuration(bookId, 1, preset);
+        if (duration) {
+          durations.set(`${bookId}-1`, duration.formatted);
+          console.log(`Loaded duration for ${bookId} Chapter 1: ${duration.formatted}`);
+        }
+      } catch (error) {
+        console.warn(`Failed to load duration for ${bookId} Chapter 1:`, error);
+      }
+    }
+    
+    // Load duration for 3 John chapter 1 (available in GCP)
+    if (bookId === '3-john') {
+      try {
+        const duration = await getAudioDuration(bookId, 1, preset);
+        if (duration) {
+          durations.set(`${bookId}-1`, duration.formatted);
+          console.log(`Loaded duration for ${bookId} Chapter 1: ${duration.formatted}`);
+        }
+      } catch (error) {
+        console.warn(`Failed to load duration for ${bookId} Chapter 1:`, error);
+      }
+    }
+    
+    // Load durations for Revelation chapters 1-12 (available in GCP)
+    if (bookId === 'revelation') {
+      for (let chapterId = 1; chapterId <= 12; chapterId++) {
+        try {
+          const duration = await getAudioDuration(bookId, chapterId, preset);
+          if (duration) {
+            durations.set(`${bookId}-${chapterId}`, duration.formatted);
+            console.log(`Loaded duration for ${bookId} Chapter ${chapterId}: ${duration.formatted}`);
+          }
+        } catch (error) {
+          console.warn(`Failed to load duration for ${bookId} Chapter ${chapterId}:`, error);
+        }
+      }
+    }
     
     setExactDurations(durations);
   };
@@ -1171,7 +1327,7 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
                         )}
               </div>
             </div>
-                  </div>
+                          </div>
                   )}
 
                   {/* Verse-by-Verse Content */}

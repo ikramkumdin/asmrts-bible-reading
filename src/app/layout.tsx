@@ -4,6 +4,7 @@ import "./globals.css";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { TrackingProvider } from "@/contexts/TrackingContext";
 import { ToastProvider } from "@/components/ToastProvider";
+import Script from "next/script";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -19,14 +20,14 @@ export const metadata: Metadata = {
     address: false,
     telephone: false,
   },
-  metadataBase: new URL('https://asmraudiobible.com'),
+  metadataBase: new URL('https://www.asmrbible.app'),
   alternates: {
     canonical: '/',
   },
   openGraph: {
     title: "ASMR Audio Bible | Immersive & Relaxing Scripture Experience",
     description: "Experience the Bible like never before with our soothing ASMR Audio Bible. Relax, meditate and connect with scripture through immersive audio journeys.",
-    url: 'https://asmraudiobible.com',
+    url: 'https://www.asmrbible.app',
     siteName: 'ASMR Audio Bible',
     images: [
       {
@@ -66,8 +67,53 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Get Firebase Measurement ID (which is also Google Analytics 4 ID)
+  const gaMeasurementId = process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID;
+  const gaTrackingId = process.env.NEXT_PUBLIC_GA_TRACKING_ID || gaMeasurementId;
+
   return (
     <html lang="en">
+      <head>
+        {/* Google Analytics 4 (via Firebase Analytics) */}
+        {gaMeasurementId && gaMeasurementId.startsWith('G-') && (
+          <>
+            <Script
+              src={`https://www.googletagmanager.com/gtag/js?id=${gaMeasurementId}`}
+              strategy="afterInteractive"
+            />
+            <Script id="google-analytics" strategy="afterInteractive">
+              {`
+                window.dataLayer = window.dataLayer || [];
+                function gtag(){dataLayer.push(arguments);}
+                gtag('js', new Date());
+                gtag('config', '${gaMeasurementId}', {
+                  page_path: window.location.pathname,
+                });
+              `}
+            </Script>
+          </>
+        )}
+        
+        {/* Additional Google Analytics if separate tracking ID is provided */}
+        {gaTrackingId && gaTrackingId !== gaMeasurementId && gaTrackingId.startsWith('G-') && (
+          <>
+            <Script
+              src={`https://www.googletagmanager.com/gtag/js?id=${gaTrackingId}`}
+              strategy="afterInteractive"
+            />
+            <Script id="google-analytics-secondary" strategy="afterInteractive">
+              {`
+                window.dataLayer = window.dataLayer || [];
+                function gtag(){dataLayer.push(arguments);}
+                gtag('js', new Date());
+                gtag('config', '${gaTrackingId}', {
+                  page_path: window.location.pathname,
+                });
+              `}
+            </Script>
+          </>
+        )}
+      </head>
       <body className={`${inter.className} bg-gray-50 min-h-screen`} suppressHydrationWarning={true}>
         <AuthProvider>
           <TrackingProvider>

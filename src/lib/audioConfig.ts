@@ -46,16 +46,73 @@ export const isAudioAvailable = (preset: string, bookId: string, chapterId: numb
     return true;
   }
   
-  // Jude has 1 chapter available
+  // Jude chapter 1 is available for both presets
   if (bookId === 'jude' && chapterId === 1) {
     return true;
   }
   
-  // 2 John and 3 John have verse-by-verse audio only (no full chapter audio)
-  // These books don't have chapter1.mp3, only individual verse files (1.mp3, 2.mp3, etc.)
-  // So we return false here for full chapter audio availability
+  // 1 John chapters 1-5 are available for both presets
+  if (bookId === '1-john' && chapterId >= 1 && chapterId <= 5) {
+    return true;
+  }
   
-  // Other books/chapters: check based on file existence
+  // 2 John chapter 1 is available for both presets
+  if (bookId === '2-john' && chapterId === 1) {
+    return true;
+  }
+  
+  // 3 John chapter 1 is available for both presets
+  if (bookId === '3-john' && chapterId === 1) {
+    return true;
+  }
+  
+  // Revelation chapters 1-12 are available for both presets
+  if (bookId === 'revelation' && chapterId >= 1 && chapterId <= 12) {
+    return true;
+  }
+  
+  // Other books/chapters: check based on file existence (currently only Genesis 1-50, Jude 1, 1 John 1-5, 2 John 1, 3 John 1, Revelation 1-12 available)
+  return false;
+};
+
+/**
+ * Check if verse audio is available for a specific book/chapter
+ * @param preset - Voice preset (e.g., 'aria', 'heartsease')
+ * @param bookId - Bible book ID (e.g., 'genesis')
+ * @param chapterId - Chapter number
+ * @returns Whether verse audio is available
+ */
+export const isVerseAudioAvailable = (preset: string, bookId: string, chapterId: number): boolean => {
+  // Genesis chapters 46-50 have verse-by-verse audio
+  if (bookId === 'genesis' && chapterId >= 46 && chapterId <= 50) {
+    return true;
+  }
+  
+  // Jude chapter 1 has verse-by-verse audio
+  if (bookId === 'jude' && chapterId === 1) {
+    return true;
+  }
+  
+  // 1 John chapters 1-5 have verse-by-verse audio
+  if (bookId === '1-john' && chapterId >= 1 && chapterId <= 5) {
+    return true;
+  }
+  
+  // 2 John chapter 1 has verse-by-verse audio
+  if (bookId === '2-john' && chapterId === 1) {
+    return true;
+  }
+  
+  // 3 John chapter 1 has verse-by-verse audio
+  if (bookId === '3-john' && chapterId === 1) {
+    return true;
+  }
+  
+  // Revelation chapters 1-12 have verse-by-verse audio
+  if (bookId === 'revelation' && chapterId >= 1 && chapterId <= 12) {
+    return true;
+  }
+  
   return false;
 };
 

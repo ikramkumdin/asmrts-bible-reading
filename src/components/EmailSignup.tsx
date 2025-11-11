@@ -63,7 +63,7 @@ export default function EmailSignup() {
                    progressPercent: 40,
                    quoteText: 'For God so loved the world that he gave his one and only Son, that whoever believes in him shall not perish but have eternal life.',
                    quoteRef: 'John 3:16',
-                   buttonUrl: '/bible',
+                   buttonUrl: 'https://www.asmrbible.app/bible',
                    ctaText: 'Continue Reading',
                  });
                }

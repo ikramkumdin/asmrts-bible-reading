@@ -1,0 +1,13 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/send-reminders?frequency=daily",
+      "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/cron/send-reminders?frequency=weekly",
+      "schedule": "0 9 * * 1"
+    }
+  ]
+}
+

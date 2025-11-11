@@ -15,7 +15,7 @@ export default function SubscriptionBanner({ onClose }: SubscriptionBannerProps)
           <div className="text-sm text-blue-800">
             Subscribe all to my email?{' '}
             <a 
-              href="#email-signup" 
+              href="https://www.asmrbible.app/#email-signup" 
               className="text-blue-600 hover:text-blue-800 underline font-medium"
             >
               Click here!

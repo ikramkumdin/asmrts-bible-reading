@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { 
   Sparkles, 
   Headphones, 
@@ -20,12 +20,21 @@ import EmailSignup from '@/components/EmailSignup';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import { trackPageView } from '@/lib/firebaseConfig';
-import { getAllBooks } from '@/lib/bibleData';
+import type { BibleBook } from '@/lib/bibleData';
 import Link from 'next/link';
 
 export default function HomePage() {
-  const bibleBooks = getAllBooks();
-  const featuredBooks = bibleBooks.slice(0, 6);
+  const [featuredBooks, setFeaturedBooks] = useState<BibleBook[]>([]);
+  
+  useEffect(() => {
+    // Dynamically import bibleData only on client side to avoid SSR issues with large file
+    import('@/lib/bibleData').then(({ getAllBooks }) => {
+      const bibleBooks = getAllBooks();
+      setFeaturedBooks(bibleBooks.slice(0, 6));
+    }).catch((error) => {
+      console.error('Error loading bible data:', error);
+    });
+  }, []);
 
   // Track page view
   useEffect(() => {

@@ -5,12 +5,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { to, subject, template, data } = body;
     
-    console.log('📧 Email API called with:', { to, subject, template });
-    console.log('📧 Environment variables check:', {
-      hasResend: !!process.env.RESEND_API_KEY,
-      hasSendGrid: !!process.env.SENDGRID_API_KEY,
-      hasSMTP: !!process.env.SMTP_HOST
-    });
+    // Email API called
 
     // For now, we'll use a simple email service
     // You can replace this with SendGrid, Mailchimp, Resend, etc.
@@ -105,13 +100,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Fallback: Just log the email (for development)
-    console.log('📧 No email service configured. Email would be sent:', {
-      to,
-      subject,
-      template,
-      data
-    });
+    // Fallback: No email service configured
     
     return NextResponse.json({ 
       success: true, 
@@ -125,6 +114,16 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+// Generate unsubscribe URL
+function generateUnsubscribeUrl(email: string, bookId?: string): string {
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.asmrbible.app';
+  const token = Buffer.from(`${email}-${bookId || 'all'}-unsubscribe`).toString('base64');
+  if (bookId) {
+    return `${baseUrl}/api/unsubscribe?email=${encodeURIComponent(email)}&bookId=${encodeURIComponent(bookId)}&token=${token}`;
+  }
+  return `${baseUrl}/unsubscribe?email=${encodeURIComponent(email)}`;
 }
 
 function generateEmailContent(template: string, data: Record<string, any>) {
@@ -169,13 +168,13 @@ function generateEmailContent(template: string, data: Record<string, any>) {
               
               <p>You'll receive your first email soon with a beautiful ASMR Bible chapter to help you relax and connect with God's Word.</p>
               
-              <a href="https://asmrts-bible-reading.vercel.app" class="button">Start Listening Now</a>
+              <a href="https://www.asmrbible.app" class="button">Start Listening Now</a>
               
               <p>If you have any questions or need to update your preferences, just reply to this email.</p>
             </div>
             <div class="footer">
               <p>ASMR Audio Bible - Bringing peace through God's Word</p>
-              <p>You can unsubscribe at any time by replying to this email.</p>
+              <p><a href="${generateUnsubscribeUrl(data.email || '')}" style="color: #667eea; text-decoration: underline;">Unsubscribe from all emails</a></p>
             </div>
           </div>
         </body>
@@ -194,12 +193,12 @@ Your subscription preferences:
 
 You'll receive your first email soon with a beautiful ASMR Bible chapter to help you relax and connect with God's Word.
 
-Visit https://asmrts-bible-reading.vercel.app to start listening now.
+Visit https://www.asmrbible.app to start listening now.
 
 If you have any questions or need to update your preferences, just reply to this email.
 
 ASMR Audio Bible - Bringing peace through God's Word
-You can unsubscribe at any time by replying to this email.
+Unsubscribe: ${generateUnsubscribeUrl(data.email || '')}
     `;
 
     return { html, text };
@@ -209,7 +208,7 @@ You can unsubscribe at any time by replying to this email.
     const progress = typeof data.progressPercent === 'number' ? Math.min(100, Math.max(0, data.progressPercent)) : 0;
     const chapterLabel = data.chapterLabel || 'Your Chapter';
     const ctaText = data.ctaText || `Continue Reading ${chapterLabel}`;
-    const buttonUrl = data.buttonUrl || 'https://asmrts-bible-reading.vercel.app/bible';
+    const buttonUrl = data.buttonUrl || 'https://www.asmrbible.app/bible';
     const quoteText = data.quoteText || '“For God so loved the world that he gave his one and only Son, that whoever believes in him shall not perish but have eternal life.”';
     const quoteRef = data.quoteRef || 'John 3:16';
     const deliveryHint = data.deliveryType === 'unfinished' 
@@ -261,7 +260,10 @@ You can unsubscribe at any time by replying to this email.
                 <div>🎧 ASMR Audio</div>
                 <div>📝 Take Notes</div>
               </div>
-              <div class="footer">You're receiving this email because you're subscribed to daily reading reminders.</div>
+              <div class="footer">
+                <p>You're receiving this email because you're subscribed to daily reading reminders.</p>
+                <p><a href="${generateUnsubscribeUrl(data.email || '')}" style="color: #667eea; text-decoration: underline;">Unsubscribe from all emails</a></p>
+              </div>
             </div>
           </div>
         </body>
@@ -270,6 +272,193 @@ You can unsubscribe at any time by replying to this email.
 
     const text = `
 Daily ASMR Bible Reminder\n\nContinue Reading: ${chapterLabel}\n${deliveryHint}\n\nProgress: ${progress}% completed\n\n${quoteText}\n- ${quoteRef}\n\nOpen: ${buttonUrl}\n`;
+
+    return { html, text };
+  }
+
+  if (template === 'bookSubscription') {
+    const bookTitle = data.bookTitle || 'Your Book';
+    const asmrModel = data.asmrModel === 'aria' ? 'Aria (Soft & Gentle)' : 'Heartsease (Warm & Soothing)';
+    const deliveryType = data.deliveryType === 'unfinished' ? 'Unfinished Chapters Only' : 'Complete Chapters';
+    const frequency = data.frequency === 'daily' ? 'Daily' : 'Weekly';
+    const bookUrl = `https://www.asmrbible.app/bible/${data.bookId}`;
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <title>Book Subscription Confirmation</title>
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; background: #f7fafc; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .card { background: #ffffff; border-radius: 10px; box-shadow: 0 6px 20px rgba(0,0,0,0.06); padding: 30px; }
+            .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; margin: -30px -30px 30px -30px; }
+            .book-title { font-size: 24px; font-weight: 700; color: #1a202c; margin: 20px 0; }
+            .preference { background: #f7fafc; padding: 15px; margin: 10px 0; border-radius: 5px; border-left: 4px solid #667eea; }
+            .button { background: #667eea; color: white; padding: 14px 28px; text-decoration: none; border-radius: 8px; display: inline-block; margin: 20px 0; font-weight: 600; }
+            .footer { text-align: center; margin-top: 30px; color: #666; font-size: 14px; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="card">
+              <div class="header">
+                <h1>📖 Book Subscription Confirmed!</h1>
+                <p>You're all set to receive ${frequency.toLowerCase()} updates</p>
+              </div>
+              
+              <div class="book-title">${bookTitle}</div>
+              
+              <p>Thank you for subscribing to <strong>${bookTitle}</strong>! You'll receive ${frequency.toLowerCase()} email reminders to help you stay connected with God's Word through our soothing ASMR narration.</p>
+              
+              <div class="preference">
+                <strong>🎤 ASMR Voice:</strong> ${asmrModel}
+              </div>
+              
+              <div class="preference">
+                <strong>📖 Chapter Delivery:</strong> ${deliveryType}
+              </div>
+              
+              <div class="preference">
+                <strong>📅 Email Frequency:</strong> ${frequency}
+              </div>
+              
+              <p>Your first email will arrive ${frequency === 'daily' ? 'tomorrow' : 'next week'} with a beautiful chapter from ${bookTitle} to help you relax and connect with God's Word.</p>
+              
+              <div style="text-align: center;">
+                <a href="${bookUrl}" class="button">Start Reading ${bookTitle} Now</a>
+              </div>
+              
+              <p style="margin-top: 30px; color: #666; font-size: 14px;">You can manage your book subscriptions anytime by visiting your account settings.</p>
+            </div>
+            <div class="footer">
+              <p>ASMR Audio Bible - Bringing peace through God's Word</p>
+              <p><a href="${generateUnsubscribeUrl(data.email || '', data.bookId)}" style="color: #667eea; text-decoration: underline;">Unsubscribe from ${data.bookTitle || 'this book'}</a></p>
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
+
+    const text = `
+Book Subscription Confirmed!
+
+Thank you for subscribing to ${bookTitle}! You'll receive ${frequency.toLowerCase()} email reminders to help you stay connected with God's Word through our soothing ASMR narration.
+
+Your preferences:
+- ASMR Voice: ${asmrModel}
+- Chapter Delivery: ${deliveryType}
+- Email Frequency: ${frequency}
+
+Your first email will arrive ${frequency === 'daily' ? 'tomorrow' : 'next week'} with a beautiful chapter from ${bookTitle}.
+
+Start reading: ${bookUrl}
+
+You can manage your book subscriptions anytime by visiting your account settings.
+
+ASMR Audio Bible - Bringing peace through God's Word
+Unsubscribe from ${data.bookTitle || 'this book'}: ${generateUnsubscribeUrl(data.email || '', data.bookId)}
+    `;
+
+    return { html, text };
+  }
+
+  if (template === 'bookReminder') {
+    const bookTitle = data.bookTitle || 'Your Book';
+    const chapterLabel = data.chapterLabel || `${bookTitle} Chapter 1`;
+    const progress = typeof data.progressPercent === 'number' ? Math.min(100, Math.max(0, data.progressPercent)) : 0;
+    const quoteText = data.quoteText || `"For I know the plans I have for you," declares the Lord, "plans to prosper you and not to harm you, plans to give you hope and a future."`;
+    const quoteRef = data.quoteRef || 'Jeremiah 29:11';
+    const buttonUrl = data.buttonUrl || `https://www.asmrbible.app/bible/${data.bookId}`;
+    const ctaText = data.ctaText || `Continue Reading ${bookTitle}`;
+    const deliveryHint = data.deliveryType === 'unfinished' 
+      ? "You haven't finished this chapter yet. Pick up where you left off."
+      : 'Enjoy a complete, soothing chapter today.';
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <title>${bookTitle} Reading Reminder</title>
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #2d3748; background: #f7fafc; }
+            .container { max-width: 640px; margin: 0 auto; padding: 20px; }
+            .card { background: #ffffff; border-radius: 10px; box-shadow: 0 6px 20px rgba(0,0,0,0.06); padding: 24px; }
+            .book-header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+            .book-title { font-size: 20px; font-weight: 700; margin: 0 0 8px; }
+            .chapter-label { font-size: 16px; opacity: 0.9; margin: 0; }
+            .title { font-size: 18px; font-weight: 700; color: #1a202c; margin: 0 0 8px; }
+            .subtitle { color: #4a5568; margin: 0 0 16px; }
+            .progress-wrap { margin: 16px 0; }
+            .progress-bar { height: 8px; background: #e2e8f0; border-radius: 999px; overflow: hidden; }
+            .progress { height: 8px; background: #68d391; width: ${progress}%; }
+            .progress-label { text-align: right; color: #718096; font-size: 12px; margin-top: 6px; }
+            .quote { background: #f7fafc; border-left: 4px solid #667eea; padding: 14px 16px; border-radius: 6px; color: #2d3748; font-style: italic; margin: 20px 0; }
+            .quote-ref { text-align: right; color: #718096; font-size: 12px; margin-top: 8px; }
+            .button { margin-top: 20px; display: inline-block; background: #667eea; color: #ffffff; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-weight: 700; }
+            .features { display: flex; gap: 24px; justify-content: center; color: #4a5568; margin-top: 24px; font-size: 14px; }
+            .footer { text-align: center; color: #a0aec0; font-size: 12px; margin-top: 18px; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="card">
+              <div class="book-header">
+                <div class="book-title">${bookTitle}</div>
+                <div class="chapter-label">${chapterLabel}</div>
+              </div>
+              
+              <div class="title">Continue Your Reading Journey</div>
+              <p class="subtitle">${deliveryHint}</p>
+
+              <div class="progress-wrap">
+                <div class="progress-bar">
+                  <div class="progress"></div>
+                </div>
+                <div class="progress-label">${progress}% completed</div>
+              </div>
+
+              <div class="quote">${quoteText}</div>
+              <div class="quote-ref">- ${quoteRef}</div>
+
+              <div style="text-align: center;">
+                <a class="button" href="${buttonUrl}">${ctaText}</a>
+              </div>
+
+              <div class="features">
+                <div>🎧 ASMR Audio</div>
+                <div>📝 Take Notes</div>
+                <div>📖 ${bookTitle}</div>
+              </div>
+              <div class="footer">
+                <p>You're receiving this email because you're subscribed to ${bookTitle} reading reminders.
+Unsubscribe from ${bookTitle}: ${generateUnsubscribeUrl(data.email || '', data.bookId)}</p>
+                <p><a href="${generateUnsubscribeUrl(data.email || '', data.bookId)}" style="color: #667eea; text-decoration: underline;">Unsubscribe from ${bookTitle}</a></p>
+              </div>
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
+
+    const text = `
+${bookTitle} Reading Reminder
+
+${chapterLabel}
+${deliveryHint}
+
+Progress: ${progress}% completed
+
+${quoteText}
+- ${quoteRef}
+
+Continue reading: ${buttonUrl}
+
+You're receiving this email because you're subscribed to ${bookTitle} reading reminders.
+Unsubscribe from ${bookTitle}: ${generateUnsubscribeUrl(data.email || '', data.bookId)}
+    `;
 
     return { html, text };
   }

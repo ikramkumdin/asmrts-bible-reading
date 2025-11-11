@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
-import { auth, convertFirebaseUser, signInWithGoogle, signOutUser, User, trackSignup, trackLogin } from '@/lib/firebaseConfig';
+import { auth, convertFirebaseUser, signInWithGoogle, signOutUser, handleRedirectResult, User, trackSignup, trackLogin } from '@/lib/firebaseConfig';
 
 interface AuthContextType {
   user: User | null;
@@ -35,6 +35,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setLoading(false);
       return;
     }
+    
+    // Check for redirect result first (if user just returned from redirect auth)
+    handleRedirectResult().then((redirectResult) => {
+      if (redirectResult) {
+        setUser(redirectResult.user);
+        setLoading(false);
+      }
+    }).catch((error) => {
+      console.error('Error handling redirect result:', error);
+    });
     
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
       try {

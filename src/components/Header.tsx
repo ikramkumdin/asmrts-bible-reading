@@ -60,12 +60,12 @@ export default function Header() {
                 >
                   Sign In
                 </button>
-                <Link
-                  href="#email-signup"
+                <a
+                  href="https://www.asmrbible.app/#email-signup"
                   className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors"
                 >
                   Subscribe
-                </Link>
+                </a>
               </>
             )}
           </div>
@@ -114,13 +114,13 @@ export default function Header() {
                     >
                       Sign In
                     </button>
-                    <Link
-                      href="#email-signup"
+                    <a
+                      href="https://www.asmrbible.app/#email-signup"
                       className="block w-full bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors text-center"
                       onClick={() => setIsMenuOpen(false)}
                     >
                       Subscribe
-                    </Link>
+                    </a>
                   </>
                 )}
               </div>

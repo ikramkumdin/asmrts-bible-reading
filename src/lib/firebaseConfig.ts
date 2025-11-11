@@ -1,5 +1,5 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, User as FirebaseUser } from "firebase/auth";
+import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signOut, User as FirebaseUser } from "firebase/auth";
 import { getFirestore, doc, setDoc, getDoc } from "firebase/firestore";
 import { getAnalytics, logEvent, Analytics } from "firebase/analytics";
 
@@ -12,7 +12,7 @@ export interface User {
   tokenCount: number;
 }
 
-// Firebase configuration
+// Firebase configuration - reads from .env.local
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
@@ -23,35 +23,70 @@ const firebaseConfig = {
   measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
 };
 
+// Firebase config initialized
+
 // Initialize Firebase only if we have valid config and we're on the client side
 let app: ReturnType<typeof initializeApp> | null = null;
 let auth: ReturnType<typeof getAuth> | null = null;
 let db: ReturnType<typeof getFirestore> | null = null;
 let analytics: Analytics | null = null;
 
-if (typeof window !== 'undefined' && firebaseConfig.apiKey && firebaseConfig.projectId) {
-  try {
-    app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
-    auth = getAuth(app);
-    db = getFirestore(app);
-    
-    // Only initialize Analytics if measurementId is available and valid
-    if (firebaseConfig.measurementId && 
-        firebaseConfig.measurementId !== 'your_measurement_id' && 
-        firebaseConfig.measurementId.startsWith('G-') &&
-        firebaseConfig.measurementId.length > 10) {
-      try {
-        analytics = getAnalytics(app);
-        console.log('Firebase Analytics initialized successfully');
-      } catch (analyticsError) {
-        console.warn('Firebase Analytics initialization failed:', analyticsError);
-        analytics = null;
+// Validate Firebase config before initialization
+if (typeof window !== 'undefined') {
+  if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
+    console.error('❌ Firebase configuration is missing!');
+    console.error('Missing values:', {
+      apiKey: !firebaseConfig.apiKey,
+      projectId: !firebaseConfig.projectId,
+      authDomain: !firebaseConfig.authDomain,
+      appId: !firebaseConfig.appId,
+    });
+    console.error('Please check your .env.local file and ensure all NEXT_PUBLIC_FIREBASE_* variables are set.');
+  } else {
+    try {
+      // Check if Firebase is already initialized with a different project
+      const existingApps = getApps();
+      if (existingApps.length > 0) {
+        const existingApp = existingApps[0];
+        const existingProjectId = (existingApp.options as { projectId?: string })?.projectId;
+        if (existingProjectId && existingProjectId !== firebaseConfig.projectId) {
+          // Firebase already initialized with different project - reinitializing
+          try {
+            app = initializeApp(firebaseConfig, 'NEW_INSTANCE');
+            auth = getAuth(app);
+            db = getFirestore(app);
+          } catch (reinitError) {
+            console.error('Failed to re-initialize Firebase:', reinitError);
+            // Fall back to existing app
+            app = existingApp;
+            auth = getAuth(app);
+            db = getFirestore(app);
+          }
+        } else {
+          app = existingApp;
+          auth = getAuth(app);
+          db = getFirestore(app);
+        }
+      } else {
+        app = initializeApp(firebaseConfig);
+        auth = getAuth(app);
+        db = getFirestore(app);
       }
-    } else {
-      console.warn('Firebase Analytics not initialized: No valid measurementId (should start with G- and be longer than 10 chars)');
+      
+      // Only initialize Analytics if measurementId is available and valid
+      if (firebaseConfig.measurementId && 
+          firebaseConfig.measurementId !== 'your_measurement_id' && 
+          firebaseConfig.measurementId.startsWith('G-') &&
+          firebaseConfig.measurementId.length > 10) {
+        try {
+          analytics = getAnalytics(app);
+        } catch (analyticsError) {
+          analytics = null;
+        }
+      }
+    } catch (error) {
+      console.error('Firebase initialization error:', error);
     }
-  } catch (error) {
-    console.error('Firebase initialization error:', error);
   }
 }
 
@@ -65,6 +100,7 @@ provider.setCustomParameters({
 
 /**
  * Sign in with Google and handle user creation/retrieval
+ * Uses popup by default, falls back to redirect if COOP policy blocks popup
  */
 export const signInWithGoogle = async (): Promise<{
   token: string;
@@ -76,9 +112,38 @@ export const signInWithGoogle = async (): Promise<{
   }
   
   try {
-    // 1. Trigger Google Sign-In popup
-    const result = await signInWithPopup(auth, provider);
-    const firebaseUser = result.user;
+    // 1. Try popup first (preferred UX)
+    let result;
+    let firebaseUser: FirebaseUser;
+    
+    try {
+      result = await signInWithPopup(auth, provider);
+      firebaseUser = result.user;
+    } catch (popupError: any) {
+      // Suppress COOP warnings - they're just warnings, popup still works
+      // The warning appears because browser can't check if popup was closed due to COOP policy
+      // But the authentication still succeeds
+      if (popupError?.message?.includes('Cross-Origin-Opener-Policy') ||
+          popupError?.message?.includes('window.closed')) {
+        // This is just a warning, not an actual error
+        // The popup authentication should still work
+        // If we have a result, use it; otherwise it's a real error
+        if (result?.user) {
+          firebaseUser = result.user;
+        } else {
+          // Popup was actually blocked, fall back to redirect
+          await signInWithRedirect(auth, provider);
+          throw new Error('Redirecting to Google sign-in...');
+        }
+      } else if (popupError?.code === 'auth/popup-blocked') {
+        // Popup was blocked by browser, use redirect
+        await signInWithRedirect(auth, provider);
+        throw new Error('Redirecting to Google sign-in...');
+      } else {
+        // Re-throw other errors
+        throw popupError;
+      }
+    }
 
     // 2. Get Firebase ID token
     const token = await firebaseUser.getIdToken();
@@ -129,8 +194,82 @@ export const signInWithGoogle = async (): Promise<{
 
     return { token, user: userData, userTokens };
   } catch (error: unknown) {
+    // Don't throw error if it's a redirect (that's expected)
+    if (error instanceof Error && error.message === 'Redirecting to Google sign-in...') {
+      throw error; // Let the redirect happen
+    }
     console.error("Google Sign-In Error:", error);
     throw new Error(error instanceof Error ? error.message : "Failed to sign in with Google");
+  }
+};
+
+/**
+ * Handle redirect result after Google sign-in redirect
+ * Call this on page load to check if user just returned from redirect
+ */
+export const handleRedirectResult = async (): Promise<{
+  token: string;
+  user: User;
+  userTokens: number;
+} | null> => {
+  if (!auth || !db) {
+    return null;
+  }
+  
+  try {
+    const result = await getRedirectResult(auth);
+    if (!result) {
+      return null; // No redirect result
+    }
+    
+    const firebaseUser = result.user;
+    const token = await firebaseUser.getIdToken();
+    
+    // Check for user in Firestore
+    const userRef = doc(db, "users", firebaseUser.uid);
+    const userDoc = await getDoc(userRef);
+    
+    let userTokens = 100; // Default tokens for new users
+    let userData: User;
+    
+    // Create new user if they don't exist
+    if (!userDoc.exists()) {
+      userData = {
+        uid: firebaseUser.uid,
+        email: firebaseUser.email,
+        displayName: firebaseUser.displayName,
+        photoURL: firebaseUser.photoURL,
+        tokenCount: userTokens,
+      };
+      
+      await setDoc(userRef, {
+        ...userData,
+        createdAt: new Date().toISOString(),
+        lastLoginAt: new Date().toISOString(),
+      });
+      
+      trackSignup('google', firebaseUser.email || undefined);
+    } else {
+      const existingData = userDoc.data();
+      userTokens = existingData.tokenCount || 0;
+      
+      userData = {
+        uid: firebaseUser.uid,
+        email: firebaseUser.email,
+        displayName: firebaseUser.displayName,
+        photoURL: firebaseUser.photoURL,
+        tokenCount: userTokens,
+      };
+      
+      await setDoc(userRef, {
+        lastLoginAt: new Date().toISOString(),
+      }, { merge: true });
+    }
+    
+    return { token, user: userData, userTokens };
+  } catch (error: unknown) {
+    console.error("Redirect result error:", error);
+    return null;
   }
 };
 
@@ -179,14 +318,13 @@ export const convertFirebaseUser = async (firebaseUser: FirebaseUser): Promise<U
 // Helper function to safely log events
 const safeLogEvent = (eventName: string, parameters: Record<string, unknown>) => {
   if (!analytics) {
-    console.warn(`Analytics not available for event: ${eventName}`);
     return;
   }
   
   try {
     logEvent(analytics, eventName, parameters);
   } catch (error) {
-    console.warn(`Failed to track event ${eventName}:`, error);
+    // Silently fail analytics tracking
   }
 };
 
@@ -291,6 +429,26 @@ export const trackError = (errorType: string, errorMessage: string, context?: st
     bible_error_message: errorMessage,
     bible_context: context || 'unknown',
     content_category: 'error'
+  });
+};
+
+// Track book subscription events
+export const trackBookSubscription = (bookId: string, bookTitle: string, frequency: 'daily' | 'weekly', asmrModel: string) => {
+  safeLogEvent('bible_book_subscribe', {
+    bible_book_id: bookId,
+    bible_book_title: bookTitle,
+    bible_frequency: frequency,
+    bible_asmr_model: asmrModel,
+    content_category: 'subscription'
+  });
+};
+
+// Track book unsubscription events
+export const trackBookUnsubscription = (bookId: string, bookTitle: string) => {
+  safeLogEvent('bible_book_unsubscribe', {
+    bible_book_id: bookId,
+    bible_book_title: bookTitle,
+    content_category: 'subscription'
   });
 };
 

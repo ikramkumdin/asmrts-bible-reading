@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Mail, Headphones, BookOpen, Settings, Trash2, Eye } from 'lucide-react';
-import { getLocalSubscriptions, removeSubscriptionLocally, type SubscriptionData } from '@/lib/emailService';
+import { Mail, Headphones, BookOpen, Settings, Trash2, Eye, DollarSign, Receipt, Calculator } from 'lucide-react';
+import { getLocalSubscriptions, removeSubscriptionLocally, type SubscriptionData, calculateSubscriptionCost } from '@/lib/emailService';
 
 interface SubscriptionWithId extends SubscriptionData {
   id: string;
@@ -112,6 +112,57 @@ export default function SubscriptionsPage() {
                             </p>
                           </div>
                         </div>
+
+                        {/* Cost Card for New Subscriptions */}
+                        {(subscription.isNew === true || subscription.isNew === undefined) && (
+                          <div className="mt-4 bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg p-4 border border-purple-200">
+                            <div className="flex items-center gap-2 mb-3">
+                              <DollarSign className="w-5 h-5 text-purple-600" />
+                              <span className="text-sm font-semibold text-gray-800">Subscription Cost</span>
+                              {subscription.isNew && (
+                                <span className="ml-auto px-2 py-1 bg-green-100 text-green-700 text-xs font-medium rounded-full">
+                                  New
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center justify-between">
+                              {subscription.receiptAmount ? (
+                                <div className="flex items-center gap-2">
+                                  <Receipt className="w-4 h-4 text-green-600" />
+                                  <div>
+                                    <p className="text-xs text-gray-600">Receipt Amount</p>
+                                    <p className="text-lg font-bold text-green-700">${subscription.receiptAmount.toFixed(2)}</p>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-2">
+                                  <Calculator className="w-4 h-4 text-blue-600" />
+                                  <div>
+                                    <p className="text-xs text-gray-600">Calculated Cost</p>
+                                    <p className="text-lg font-bold text-blue-700">
+                                      ${(subscription.calculatedCost ?? calculateSubscriptionCost(
+                                        subscription.asmrModel,
+                                        subscription.deliveryType,
+                                        subscription.frequency
+                                      )).toFixed(2)}
+                                    </p>
+                                  </div>
+                                </div>
+                              )}
+                              <div className="text-right">
+                                <p className="text-xs text-gray-500">per month</p>
+                              </div>
+                            </div>
+                            {subscription.receiptAmount && subscription.calculatedCost && (
+                              <div className="mt-2 pt-2 border-t border-purple-200">
+                                <p className="text-xs text-gray-600">
+                                  Calculated: ${subscription.calculatedCost.toFixed(2)} | 
+                                  Receipt: ${subscription.receiptAmount.toFixed(2)}
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
 
                       <button
