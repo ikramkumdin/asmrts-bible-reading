@@ -32,11 +32,19 @@ export async function POST(req: NextRequest) {
     // Get event type and clone request for text-based signature check
     const eventType = req.headers.get("x-event-name");
     
+    console.log("🔔 Webhook received! Event type:", eventType);
+    
     // Get raw body for signature verification
     const rawBody = await req.text();
     
     // Parse body for data
     const body = JSON.parse(rawBody);
+    
+    console.log("📦 Webhook body structure:", {
+      meta: body.meta,
+      dataAttributes: body.data?.attributes,
+      customData: body.meta?.custom_data,
+    });
 
     // Signature verification
     const secret = process.env.LEMON_SQUEEZY_WEBHOOK_SIGNATURE;
@@ -67,13 +75,32 @@ export async function POST(req: NextRequest) {
 
     // Event handling logic
     if (eventType === "order_created") {
-      const userId = body.meta?.custom_data?.user_id;
+      // Try multiple possible locations for user_id
+      const userId = body.meta?.custom_data?.user_id 
+        || body.data?.attributes?.checkout_data?.custom?.user_id
+        || body.data?.attributes?.user_id;
+      
+      console.log("👤 Extracted user ID:", userId);
+      console.log("🔍 Looking in paths:", {
+        path1: body.meta?.custom_data?.user_id,
+        path2: body.data?.attributes?.checkout_data?.custom?.user_id,
+        path3: body.data?.attributes?.user_id,
+      });
+      
       // Check both product_id and variant_id from the order item
       const productId = body.data?.attributes?.first_order_item?.product_id;
       const variantId = body.data?.attributes?.first_order_item?.variant_id;
       const isSuccessful = body.data?.attributes?.status === "paid";
+      
+      console.log("💰 Order details:", {
+        productId,
+        variantId,
+        status: body.data?.attributes?.status,
+        isSuccessful,
+      });
 
       if (!userId) {
+        console.error("❌ User ID not found in webhook! Full body:", JSON.stringify(body, null, 2));
         throw new Error("User ID not found in webhook data");
       }
 
@@ -97,6 +124,15 @@ export async function POST(req: NextRequest) {
         const receivedProductIdStr = productId ? String(productId) : null;
         const receivedVariantIdStr = variantId ? String(variantId) : null;
         
+        console.log("🔢 ID Comparison:", {
+          proPlanIdStr,
+          refillIdStr,
+          receivedProductIdStr,
+          receivedVariantIdStr,
+          productMatch: receivedProductIdStr === proPlanIdStr || receivedVariantIdStr === proPlanIdStr,
+          refillMatch: receivedProductIdStr === refillIdStr || receivedVariantIdStr === refillIdStr,
+        });
+        
         if (receivedProductIdStr === refillIdStr || receivedVariantIdStr === refillIdStr) {
           // Refill logic: Add 100 credits
           const currentTokens = userDoc.data().tokenCount || 0;
@@ -113,8 +149,15 @@ export async function POST(req: NextRequest) {
             isPro: true,
             proSubscriptionEnd: proSubscriptionEnd.toISOString(),
           });
+          
+          console.log("✅ Pro plan activated successfully for user:", userId);
         } else {
-          console.error("No matching product ID found. Check Lemon Squeezy configuration.");
+          console.error("❌ No matching product ID found!", {
+            receivedProductIdStr,
+            receivedVariantIdStr,
+            expectedProPlanId: proPlanIdStr,
+            expectedRefillId: refillIdStr,
+          });
         }
 
         return NextResponse.json({ success: true }, { status: 200 });
