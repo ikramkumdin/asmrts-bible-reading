@@ -88,34 +88,34 @@ export default function EmailSignup() {
   };
 
   return (
-    <section id="email-signup" className="bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 text-white py-20 px-4">
+    <section id="email-signup" className="bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 text-white py-12 md:py-20 px-4">
       <div className="max-w-6xl mx-auto">
-        <div className="text-center mb-12">
-          <div className="flex items-center justify-center gap-3 mb-6">
-            <div className="w-16 h-16 bg-yellow-400/20 rounded-full flex items-center justify-center backdrop-blur-sm">
-              <Mail className="w-8 h-8 text-yellow-400" />
+        <div className="text-center mb-8 md:mb-12">
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 md:gap-4 mb-4 md:mb-6">
+            <div className="w-12 h-12 sm:w-14 sm:h-14 md:w-16 md:h-16 bg-yellow-400/20 rounded-full flex items-center justify-center backdrop-blur-sm flex-shrink-0">
+              <Mail className="w-6 h-6 sm:w-7 sm:h-7 md:w-8 md:h-8 text-yellow-400" />
             </div>
-            <h2 className="text-4xl font-bold">
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold">
               Get ASMR Bible Reading in Your Inbox
             </h2>
           </div>
-            <p className="text-xl text-gray-200 max-w-3xl mx-auto">
+            <p className="text-base sm:text-lg md:text-xl text-gray-200 max-w-3xl mx-auto px-2">
               Subscribe to receive personalized Bible chapters with your preferred ASMR voice and delivery settings. 
               Choose how you want to experience God's Word.
             </p>
-            <div className="mt-4 text-sm text-gray-300">
-              <span className="bg-yellow-400/20 text-yellow-300 px-3 py-1 rounded-full">
+            <div className="mt-4 text-xs sm:text-sm text-gray-300 px-2">
+              <span className="bg-yellow-400/20 text-yellow-300 px-3 py-1 rounded-full inline-block">
                 Default: Aria voice, Unfinished chapters, Daily delivery
               </span>
             </div>
         </div>
 
         <div className="max-w-4xl mx-auto">
-          <form onSubmit={handleSubmit} className="bg-white/10 backdrop-blur-sm rounded-2xl p-8 border border-white/20">
+          <form onSubmit={handleSubmit} className="bg-white/10 backdrop-blur-sm rounded-2xl p-4 sm:p-6 md:p-8 border border-white/20">
             {/* Email Input */}
-            <div className="mb-8">
-              <label htmlFor="email" className="block text-lg font-semibold text-white mb-4">
-                <Mail className="w-5 h-5 inline mr-2" />
+            <div className="mb-6 md:mb-8">
+              <label htmlFor="email" className="block text-base md:text-lg font-semibold text-white mb-3 md:mb-4">
+                <Mail className="w-4 h-4 md:w-5 md:h-5 inline mr-2" />
                 Email Address
               </label>
               <input
@@ -124,20 +124,20 @@ export default function EmailSignup() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="Enter your email address"
-                className="w-full px-6 py-4 bg-white/20 border border-white/30 rounded-xl text-white placeholder-gray-300 focus:ring-2 focus:ring-yellow-400 focus:border-transparent text-lg"
+                className="w-full px-4 py-3 md:px-6 md:py-4 bg-white/20 border border-white/30 rounded-xl text-white placeholder-gray-300 focus:ring-2 focus:ring-yellow-400 focus:border-transparent text-base md:text-lg"
                 required
               />
             </div>
 
             {/* Preferences Toggle */}
-            <div className="mb-8">
+            <div className="mb-6 md:mb-8">
               <button
                 type="button"
                 onClick={() => setShowPreferences(!showPreferences)}
-                className="flex items-center gap-3 text-white hover:text-yellow-400 transition-colors"
+                className="flex items-center gap-2 md:gap-3 text-white hover:text-yellow-400 transition-colors min-h-[44px]"
               >
-                <Settings className="w-5 h-5" />
-                <span className="text-lg font-semibold">
+                <Settings className="w-4 h-4 md:w-5 md:h-5 flex-shrink-0" />
+                <span className="text-base md:text-lg font-semibold">
                   {showPreferences ? 'Hide' : 'Customize'} Your Preferences
                 </span>
               </button>
@@ -145,8 +145,8 @@ export default function EmailSignup() {
 
             {/* Preferences Panel */}
             {showPreferences && (
-              <div className="bg-white/5 rounded-xl p-6 mb-8 border border-white/10">
-                <h3 className="text-xl font-semibold text-white mb-6">Subscription Preferences</h3>
+              <div className="bg-white/5 rounded-xl p-4 sm:p-5 md:p-6 mb-6 md:mb-8 border border-white/10">
+                <h3 className="text-lg md:text-xl font-semibold text-white mb-4 md:mb-6">Subscription Preferences</h3>
                 
                 <div className="grid md:grid-cols-3 gap-6">
                   {/* ASMR Model Selection */}
@@ -253,7 +253,7 @@ export default function EmailSignup() {
               <button
                 type="submit"
                 disabled={isLoading}
-                className="bg-gradient-to-r from-yellow-500 to-orange-500 text-black font-bold px-12 py-4 rounded-2xl text-lg hover:from-yellow-600 hover:to-orange-600 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105 flex items-center gap-3 mx-auto disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+                className="bg-gradient-to-r from-yellow-500 to-orange-500 text-black font-bold px-6 py-3 md:px-12 md:py-4 rounded-2xl text-base md:text-lg hover:from-yellow-600 hover:to-orange-600 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105 flex items-center justify-center gap-2 md:gap-3 mx-auto min-h-[44px] disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
               >
                 {isLoading ? (
                   <>

@@ -9,6 +9,7 @@ interface AuthContextType {
   loading: boolean;
   signIn: () => Promise<void>;
   signOut: () => Promise<void>;
+  refreshUser: () => Promise<void>;
   isAuthenticated: boolean;
 }
 
@@ -103,11 +104,34 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
+  const handleRefreshUser = async () => {
+    if (!auth) {
+      return; // Firebase not initialized
+    }
+    
+    try {
+      const currentUser = auth.currentUser;
+      if (currentUser) {
+        const refreshedUser = await convertFirebaseUser(currentUser);
+        console.log('🔄 User data refreshed:', {
+          email: refreshedUser.email,
+          isPremium: refreshedUser.isPremium,
+          isPro: refreshedUser.isPro,
+          proSubscriptionEnd: refreshedUser.proSubscriptionEnd,
+        });
+        setUser(refreshedUser);
+      }
+    } catch (error) {
+      console.error('Error refreshing user:', error);
+    }
+  };
+
   const value: AuthContextType = {
     user,
     loading,
     signIn: handleSignIn,
     signOut: handleSignOut,
+    refreshUser: handleRefreshUser,
     isAuthenticated: !!user,
   };
 

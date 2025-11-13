@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { ArrowLeft, ArrowRight, Clock } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Clock, Play, Download, Timer } from 'lucide-react';
 import { getBookById, getAllBooks, type BibleBook } from '@/lib/bibleData';
 import { type VoicePreset } from '@/lib/audioUtils';
 import { getAudioBaseUrl } from '@/lib/audioConfig';
@@ -15,6 +15,11 @@ import { saveUserNote, deleteUserNote, loadUserNotes, type UserNoteRecord } from
 import SimplePlayButton from '@/components/SimplePlayButton';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
+import { getAudioUrl } from '@/lib/audioConfig';
+import { offlineService, getOfflineAudioId, type OfflineAudio } from '@/lib/offlineService';
+import { isProUser } from '@/utils/proCheck';
+import CheckoutConfirmationModal from '@/components/common/CheckoutConfirmationModal';
+import axios from 'axios';
 
 interface BibleStudyPageProps {
   params: Promise<{
@@ -47,6 +52,11 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
   const [seekPercent, setSeekPercent] = useState<number|null>(null);
   const [, forceUpdate] = useState({});
   const [isTransitioning, setIsTransitioning] = useState(false);
+  const [isPlayingAll, setIsPlayingAll] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [playAllQueue, setPlayAllQueue] = useState<number[]>([]);
+  const [currentPlayAllIndex, setCurrentPlayAllIndex] = useState(0);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
   // Tracking and toast hooks
   const { 
@@ -59,7 +69,16 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
     resetBookProgress
   } = useTracking();
   const { showSuccess, showError, showWarning, showInfo } = useToastContext();
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
+  
+  // Refresh user data on mount to ensure Pro status is up to date
+  useEffect(() => {
+    if (user) {
+      // Refresh immediately and then again after a short delay
+      refreshUser();
+      setTimeout(() => refreshUser(), 2000);
+    }
+  }, []); // Only run once on mount
 
   // Load saved notes from Firestore on book/user change; fallback to localStorage if not signed in
   useEffect(() => {
@@ -190,7 +209,7 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
       // If the file doesn't exist, the audio element's error handler in playAudio will catch it
       // and automatically fall back to chapter audio
       playAudio(versePath, verseKey);
-      return;
+        return;
     }
     
     // For chapter audio, check availability and play
@@ -198,14 +217,14 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
       const hasChapterAudio = hasAudioAvailable(bookId, chapterId);
       
       if (hasChapterAudio) {
-        const chapterPath = getAudioPath(preset, bookId, chapterId, 'chapter');
+      const chapterPath = getAudioPath(preset, bookId, chapterId, 'chapter');
         console.log('🎵 Chapter audio available, playing:', chapterPath);
-        playAudio(chapterPath, `${bookId}-${chapterId}`);
+          playAudio(chapterPath, `${bookId}-${chapterId}`);
         return;
       } else {
         showWarning('Audio Not Available', `Audio for ${bookId} Chapter ${chapterId} is not available yet.`);
-        return;
-      }
+          return;
+        }
     }
   };
 
@@ -234,6 +253,8 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
   const hasAudioAvailable = (bookId: string, chapterId: number): boolean => {
     if (bookId === 'genesis' && chapterId >= 1 && chapterId <= 50) return true;
     if (bookId === 'jude' && chapterId === 1) return true;
+    if (bookId === '1-peter' && chapterId >= 1 && chapterId <= 5) return true;
+    if (bookId === '2-peter' && chapterId >= 1 && chapterId <= 3) return true;
     if (bookId === '1-john' && chapterId >= 1 && chapterId <= 5) return true;
     if (bookId === '2-john' && chapterId === 1) return true;
     if (bookId === '3-john' && chapterId === 1) return true;
@@ -247,6 +268,10 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
     if (bookId === 'genesis' && chapterId >= 46 && chapterId <= 50) return true;
     // Jude has verse-by-verse audio
     if (bookId === 'jude' && chapterId === 1) return true;
+    // 1 Peter chapters 1-5 have verse-by-verse audio
+    if (bookId === '1-peter' && chapterId >= 1 && chapterId <= 5) return true;
+    // 2 Peter chapters 1-3 have verse-by-verse audio
+    if (bookId === '2-peter' && chapterId >= 1 && chapterId <= 3) return true;
     // 1 John chapters 1-5 have verse-by-verse audio
     if (bookId === '1-john' && chapterId >= 1 && chapterId <= 5) return true;
     // 2 John and 3 John have verse-by-verse audio
@@ -321,7 +346,7 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
     
     audio.src = cacheBustPath;
     audio.volume = 0.8; // Set volume to 80%
-    audio.preload = 'metadata'; // Preload metadata for faster start
+    audio.preload = 'auto'; // Preload audio data for immediate playback
 
     // Reset playback state for UI
     setDuration(0);
@@ -389,37 +414,12 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
     // Add canplay event listener
     audio.oncanplay = () => {
       audioLoadedFlag = true;
-      console.log('Audio can play:', audioPath);
       setAudioLoading(false);
     };
 
-    // Add error handler for verse audio - fall back to chapter audio if verse fails
-    audio.onerror = (e) => {
-      const { bookId, chapterId, verseId } = parseAudioKey(audioKey);
-      
-      // Only handle verse audio errors - let chapter audio errors show normally
-      if (verseId) {
-        console.log('🎵 Verse audio error, falling back to chapter audio');
-        const hasChapterAudio = hasAudioAvailable(bookId, parseInt(chapterId));
-        if (hasChapterAudio) {
-          const chapterPath = getAudioPath(selectedReader, bookId, parseInt(chapterId), 'chapter');
-          console.log('🎵 Playing chapter audio instead:', chapterPath);
-          // Use setTimeout to avoid recursion
-          setTimeout(() => {
-            playAudio(chapterPath, `${bookId}-${chapterId}`);
-            showInfo('Verse audio unavailable', 'Playing full chapter audio instead.');
-          }, 100);
-        } else {
-          showWarning('Audio Not Available', `Audio for ${bookId} Chapter ${chapterId} Verse ${verseId} is not available yet.`);
-        }
-        return;
-      }
-      
-      // For chapter audio errors, show normal error
-      console.error('❌ Audio error:', e);
-      setAudioLoading(false);
-      setIsPlaying(false);
-    };
+    // oncanplaythrough will be set in startPlayback if needed
+
+    // Error handler will be set up after other handlers to handle verse audio fallback
 
     // Add play event listener
     audio.onplay = () => {
@@ -458,16 +458,42 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
       );
     };
 
-    // Play audio
+    // Play audio - wait for audio to be ready to reduce initial pause
+    const startPlayback = async () => {
+      try {
+        // Wait for enough data to be loaded (reduces initial pause)
+        const playWhenReady = () => {
     audio.play().then(() => {
-      console.log('🎵 Audio.play() promise resolved - setting isPlaying to TRUE');
       setIsPlaying(true);
       setAudioLoading(false);
-      setIsTransitioning(false);
+            setIsTransitioning(false);
     }).catch(error => {
+            handlePlayError(error);
+          });
+        };
+
+        // If audio already has enough data, play immediately
+        if (audio.readyState >= 4) { // HAVE_ENOUGH_DATA
+          playWhenReady();
+        } else if (audio.readyState >= 3) { // HAVE_FUTURE_DATA - try playing anyway
+          playWhenReady();
+        } else {
+          // Wait for canplaythrough event (enough data loaded to play through)
+          const canPlayHandler = () => {
+            playWhenReady();
+            audio.removeEventListener('canplaythrough', canPlayHandler);
+          };
+          audio.addEventListener('canplaythrough', canPlayHandler);
+          // Force load to start downloading
+          audio.load();
+        }
+      } catch (error) {
+        handlePlayError(error);
+      }
+    };
+
+    const handlePlayError = (error: any) => {
       setIsTransitioning(false);
-      console.error('Error playing audio:', error);
-      console.error('Audio path attempted:', audioPath);
       setIsPlaying(false);
       setAudioLoading(false);
       
@@ -484,7 +510,7 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
           setIsPlaying(true);
           setAudioLoading(false);
         } catch (fallbackErr) {
-          console.error('Blob fallback failed:', fallbackErr);
+          // Blob fallback failed
           // Show user-friendly error message
           if ((error as Error).name === 'NotAllowedError') {
             alert('Please click the play button to start audio playback.');
@@ -508,10 +534,20 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
       } else {
         alert('Audio could not be played. Please check your internet connection and try again.');
       }
-    });
+    };
+
+    // Start playback
+    startPlayback();
 
     // Handle audio end
     audio.onended = () => {
+      // If playing all chapters, don't clear state - let the useEffect handle it
+      if (isPlayingAll) {
+        // Just mark as not playing, but keep currentAudio so the useEffect can play next
+        setIsPlaying(false);
+        return;
+      }
+      
       setIsPlaying(false);
       setPlayingChapter(null);
       setPlayingVerse(null);
@@ -561,25 +597,21 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
       
       // If error is null or 0, there's no actual error (sometimes onerror fires spuriously)
       if (!errorCode || errorCode.code === 0) {
-        console.log('⚠️ Audio onerror fired but no error code (likely spurious):', audioPath);
         return;
       }
       
       // If audio has already loaded successfully, don't show error
       if (audioLoadedFlag) {
-        console.log('⚠️ Error occurred but audio already loaded, ignoring:', audioPath);
         return;
       }
       
       // MEDIA_ERR_ABORTED (1) can happen during normal loading, ignore it
       if (errorCode.code === 1) {
-        console.log('⚠️ Audio loading aborted (likely user action or navigation):', audioPath);
         return;
       }
       
       // Don't clear state if audio has data (might be a transient error)
       if (audio.readyState >= 2) { // HAVE_CURRENT_DATA or higher
-        console.log('⚠️ Error occurred but audio has data (readyState >= 2), ignoring error');
         audioLoadedFlag = true;
         return;
       }
@@ -589,25 +621,33 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
       errorTimeout = setTimeout(() => {
         // Check if audio loaded in the meantime
         if (audioLoadedFlag || audio.readyState >= 2 || audio.networkState === 2) {
-          console.log('⚠️ Audio loaded after error, ignoring error message');
           return;
         }
         
         // Check error code again - if it's still an error, show the message
         const currentError = audio.error;
         if (!currentError || currentError.code === 0 || currentError.code === 1) {
-          console.log('⚠️ Error cleared, audio may have loaded');
           return;
         }
         
-        console.error('❌ Audio playback error (after delay):', error);
-        console.error('❌ Error code:', currentError.code, 'Error message:', currentError.message);
-        console.error('❌ Failed to load audio file:', audioPath);
-        console.error('❌ Full URL attempted:', cacheBustPath);
-        console.error('❌ Audio key:', audioKey);
-        console.error('❌ Audio readyState:', audio.readyState);
-        console.error('❌ Audio networkState:', audio.networkState);
+        // Now handle the actual error
+        const { bookId, chapterId, verseId } = parseAudioKey(audioKey);
         
+        // For verse audio errors, try to fall back to chapter audio
+        if (verseId) {
+          const hasChapterAudio = hasAudioAvailable(bookId, parseInt(chapterId));
+          if (hasChapterAudio) {
+            const chapterPath = getAudioPath(selectedReader, bookId, parseInt(chapterId), 'chapter');
+            // Use setTimeout to avoid recursion
+            setTimeout(() => {
+              playAudio(chapterPath, `${bookId}-${chapterId}`);
+              showInfo('Verse audio unavailable', 'Playing full chapter audio instead.');
+            }, 100);
+            return;
+          }
+        }
+        
+        // For chapter audio or if no fallback available, show error
       setIsPlaying(false);
       setPlayingChapter(null);
       setPlayingVerse(null);
@@ -615,21 +655,9 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
         setAudioLoading(false);
         setIsTransitioning(false);
         
-        // Show user-friendly error message with troubleshooting info
-        let errorMessage = `Could not load audio. Please check:\n1. File exists at: ${audioPath}\n2. CORS is configured on GCP bucket\n3. File is publicly accessible`;
-        
-        // Add specific error details
-        if (currentError.code === 2) {
-          errorMessage += '\n\nError: Network error - Unable to download the audio file.';
-        } else if (currentError.code === 3) {
-          errorMessage += '\n\nError: Decoding error - The audio file format may not be supported.';
-        } else if (currentError.code === 4) {
-          errorMessage += '\n\nError: Source not supported - The audio format is not supported by your browser.';
-        }
-        
-        showError(
-          'Audio file unavailable',
-          errorMessage
+        showWarning(
+          'Audio Not Available',
+          `Audio for ${bookId} Chapter ${chapterId}${verseId ? ` Verse ${verseId}` : ''} is not available yet.`
         );
       }, 1000); // Wait 1 second to see if audio loads
     };
@@ -640,6 +668,280 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
     { id: 'aria', name: 'Aria', avatar: '/presets/Preset3.jpg' },
     { id: 'heartsease', name: 'Heartsease', avatar: '/presets/Preset4.jpg' }
   ];
+
+  // Handle upgrade to Pro
+  const [isLoadingCheckout, setIsLoadingCheckout] = useState(false);
+  
+  // Sleep Timer (Pro feature)
+  const [showTimerModal, setShowTimerModal] = useState(false);
+  const [sleepTimerEnd, setSleepTimerEnd] = useState<number | null>(null);
+  const [sleepTimerMinutes, setSleepTimerMinutes] = useState(0);
+  const [, setTimerTick] = useState(0); // Force re-render for countdown display
+
+  // Handle sleep timer
+  const startSleepTimer = (minutes: number) => {
+    const endTime = Date.now() + (minutes * 60 * 1000);
+    setSleepTimerEnd(endTime);
+    setSleepTimerMinutes(minutes);
+    setShowTimerModal(false);
+    
+    // Check if audio is currently playing
+    if (!isPlaying && !currentAudio) {
+      showSuccess('Sleep Timer Set', `Timer set for ${minutes} minutes. Click any chapter to start playing!`);
+    } else {
+      showSuccess('Sleep Timer Set', `Audio will automatically stop in ${minutes} minutes`);
+    }
+  };
+  
+  const cancelSleepTimer = () => {
+    setSleepTimerEnd(null);
+    setSleepTimerMinutes(0);
+    showInfo('Sleep Timer Cancelled', 'Timer has been cancelled');
+  };
+  
+  // Check sleep timer and stop audio when time is up
+  useEffect(() => {
+    if (!sleepTimerEnd) return;
+    
+    const checkTimer = setInterval(() => {
+      const remaining = sleepTimerEnd - Date.now();
+      
+      // Update countdown display
+      setTimerTick(prev => prev + 1);
+      
+      if (remaining <= 0) {
+        // Stop audio
+        if (currentAudio) {
+          currentAudio.pause();
+          currentAudio.currentTime = 0;
+        }
+        setIsPlaying(false);
+        setPlayingChapter(null);
+        setPlayingVerse(null);
+        setIsPlayingAll(false);
+        setPlayAllQueue([]);
+        setCurrentPlayAllIndex(0);
+        setSleepTimerEnd(null);
+        setSleepTimerMinutes(0);
+        showInfo('Sleep Timer', 'Audio stopped - Sleep timer ended');
+        clearInterval(checkTimer);
+      }
+    }, 1000);
+    
+    return () => clearInterval(checkTimer);
+  }, [sleepTimerEnd, currentAudio, showInfo]);
+  
+  const handleUpgrade = () => {
+    // Debug: Log user Pro status before showing modal
+    console.log('handleUpgrade called - User Pro Status:', {
+      user: user ? {
+        email: user.email,
+        isPremium: user.isPremium,
+        isPro: user.isPro,
+        proSubscriptionEnd: user.proSubscriptionEnd,
+        isProUser: isProUser(user),
+      } : null,
+    });
+    
+    // Only show modal if user is NOT Pro
+    if (!isProUser(user)) {
+      setShowUpgradeModal(true);
+    } else {
+      console.log('User is already Pro, not showing upgrade modal');
+    }
+  };
+
+  const confirmCheckout = async () => {
+    if (!user?.uid) {
+      showWarning('Sign In Required', 'Please sign in to upgrade to Pro');
+      return;
+    }
+
+    setIsLoadingCheckout(true);
+    try {
+      // Get current page URL to return to after payment
+      const returnUrl = window.location.pathname + window.location.search;
+      
+      const response = await axios.post("/api/purchaseProduct", {
+        user_id: user.uid,
+        returnUrl: returnUrl,
+      });
+
+      if (response.data.checkoutUrl) {
+        window.open(response.data.checkoutUrl, "_blank");
+        setShowUpgradeModal(false);
+      } else {
+        throw new Error('No checkout URL received from server');
+      }
+    } catch (error: any) {
+      console.error("Failed to initiate subscription:", error);
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to open checkout page. Please try again.';
+      showWarning('Checkout Error', errorMessage);
+    } finally {
+      setIsLoadingCheckout(false);
+    }
+  };
+
+  // Play all chapters sequentially
+  const handlePlayAllChapters = async () => {
+    if (!book) return;
+
+    // Debug: Check Pro status
+    const userIsPro = isProUser(user);
+    console.log('handlePlayAllChapters - Pro check:', {
+      userIsPro,
+      user: user ? {
+        isPremium: user.isPremium,
+        isPro: user.isPro,
+        proSubscriptionEnd: user.proSubscriptionEnd,
+      } : null,
+    });
+
+    if (!userIsPro) {
+      handleUpgrade();
+      return;
+    }
+
+    if (isPlayingAll) {
+      // Stop playing all
+      if (currentAudio) {
+        currentAudio.pause();
+        currentAudio.currentTime = 0;
+      }
+      setIsPlayingAll(false);
+      setPlayAllQueue([]);
+      setCurrentPlayAllIndex(0);
+      return;
+    }
+
+    const chapters = book.chapterList.map(ch => ch.id).sort((a, b) => a - b);
+    console.log('🎵 Play All: Setting up queue:', {
+      bookId: book.id,
+      chapterList: book.chapterList,
+      chapters,
+      firstChapter: chapters[0],
+    });
+    
+    setPlayAllQueue(chapters);
+    setCurrentPlayAllIndex(0);
+    setIsPlayingAll(true);
+    
+    // Start playing first chapter
+    if (chapters.length > 0) {
+      const firstChapter = chapters[0];
+      console.log(`🎵 Play All: Starting first chapter: ${firstChapter}`);
+      ensureAndPlay(selectedReader, book.id, firstChapter, 'chapter');
+    }
+  };
+
+  // Download all chapters locally
+  const handleDownloadAllChapters = async () => {
+    if (!book) return;
+
+    // Debug: Check Pro status
+    const userIsPro = isProUser(user);
+    console.log('handleDownloadAllChapters - Pro check:', {
+      userIsPro,
+      user: user ? {
+        isPremium: user.isPremium,
+        isPro: user.isPro,
+        proSubscriptionEnd: user.proSubscriptionEnd,
+      } : null,
+    });
+
+    if (!userIsPro) {
+      handleUpgrade();
+      return;
+    }
+
+    setIsDownloading(true);
+    showInfo('Download Started', 'Downloading all chapters...');
+
+    try {
+      const chapters = book.chapterList.map(ch => ch.id).sort((a, b) => a - b);
+      let downloaded = 0;
+      const total = chapters.length;
+
+      for (const chapterNum of chapters) {
+        try {
+          const audioUrl = getAudioUrl(selectedReader, book.id, chapterNum, 'chapter');
+          const fileName = `${book.title.replace(/\s+/g, '_')}_Chapter_${chapterNum}_${selectedReader}.mp3`;
+          
+          // Fetch the audio file
+          const response = await fetch(audioUrl);
+          if (!response.ok) throw new Error('Failed to fetch audio file');
+          
+          // Convert to blob
+          const blob = await response.blob();
+          
+          // Create download link
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = fileName;
+          document.body.appendChild(a);
+          a.click();
+          
+          // Cleanup
+          window.URL.revokeObjectURL(url);
+          document.body.removeChild(a);
+
+          downloaded++;
+          showInfo('Download Progress', `Downloaded ${downloaded} of ${total} chapters...`);
+          
+          // Small delay between downloads to avoid overwhelming the browser
+          await new Promise(resolve => setTimeout(resolve, 500));
+        } catch (error) {
+          console.error(`Failed to download chapter ${chapterNum}:`, error);
+        }
+      }
+
+      showSuccess('Download Complete', `Successfully downloaded ${downloaded} chapters to your Downloads folder!`);
+    } catch (error) {
+      console.error('Download error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to download chapters';
+      showError('Download Failed', errorMessage);
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+  // Handle chapter completion for sequential playback
+  useEffect(() => {
+    if (!isPlayingAll || playAllQueue.length === 0 || !book) return;
+
+    const handleAudioEnd = () => {
+      console.log(`🎵 Play All: Chapter ${playAllQueue[currentPlayAllIndex]} ended. Index: ${currentPlayAllIndex}/${playAllQueue.length - 1}`);
+      
+      if (currentPlayAllIndex < playAllQueue.length - 1) {
+        // Play next chapter
+        const nextIndex = currentPlayAllIndex + 1;
+        const nextChapter = playAllQueue[nextIndex];
+        console.log(`🎵 Play All: Playing next chapter ${nextChapter} (index ${nextIndex})`);
+        setCurrentPlayAllIndex(nextIndex);
+        
+        setTimeout(() => {
+          ensureAndPlay(selectedReader, book.id, nextChapter, 'chapter');
+        }, 500); // Small delay between chapters
+      } else {
+        // Finished all chapters
+        console.log('🎵 Play All: All chapters completed!');
+        setIsPlayingAll(false);
+        setPlayAllQueue([]);
+        setCurrentPlayAllIndex(0);
+        setCurrentAudio(null);
+        setIsPlaying(false);
+        showSuccess('Playback Complete', 'Finished playing all chapters!');
+      }
+    };
+
+    if (currentAudio) {
+      currentAudio.addEventListener('ended', handleAudioEnd);
+      return () => {
+        currentAudio.removeEventListener('ended', handleAudioEnd);
+      };
+    }
+  }, [isPlayingAll, playAllQueue, currentPlayAllIndex, currentAudio, book, selectedReader, ensureAndPlay, showSuccess]);
 
   // Save chapter-specific note
   const saveChapterNote = async (chapterId: number) => {
@@ -727,6 +1029,36 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
         }
       } catch (error) {
         console.warn(`Failed to load duration for ${bookId} Chapter 1:`, error);
+      }
+    }
+    
+    // Load durations for 1 Peter chapters 1-5 (available in GCP)
+    if (bookId === '1-peter') {
+      for (let chapterId = 1; chapterId <= 5; chapterId++) {
+        try {
+          const duration = await getAudioDuration(bookId, chapterId, preset);
+          if (duration) {
+            durations.set(`${bookId}-${chapterId}`, duration.formatted);
+            console.log(`Loaded duration for ${bookId} Chapter ${chapterId}: ${duration.formatted}`);
+          }
+        } catch (error) {
+          console.warn(`Failed to load duration for ${bookId} Chapter ${chapterId}:`, error);
+        }
+      }
+    }
+    
+    // Load durations for 2 Peter chapters 1-3 (available in GCP)
+    if (bookId === '2-peter') {
+      for (let chapterId = 1; chapterId <= 3; chapterId++) {
+        try {
+          const duration = await getAudioDuration(bookId, chapterId, preset);
+          if (duration) {
+            durations.set(`${bookId}-${chapterId}`, duration.formatted);
+            console.log(`Loaded duration for ${bookId} Chapter ${chapterId}: ${duration.formatted}`);
+          }
+        } catch (error) {
+          console.warn(`Failed to load duration for ${bookId} Chapter ${chapterId}:`, error);
+        }
       }
     }
     
@@ -894,6 +1226,91 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
       <main className="w-full px-4 py-8 bg-white">
         <div className="max-w-6xl mx-auto">
 
+          {/* Upgrade Modal - Only show if user is NOT Pro */}
+          {!isProUser(user) && (
+            <CheckoutConfirmationModal
+              isOpen={showUpgradeModal}
+              onClose={() => setShowUpgradeModal(false)}
+              onConfirm={confirmCheckout}
+              title="Upgrade to Pro Plan"
+              description="Get unlimited access to premium features including sequential chapter playback, sleep timer, and offline downloads."
+              planType="subscription"
+              price="$2.99"
+            />
+          )}
+          
+          {/* Sleep Timer Modal (Pro users only) */}
+          {showTimerModal && (
+            <div className="fixed inset-0 flex items-center justify-center z-50 p-4 pointer-events-none">
+              <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 relative pointer-events-auto">
+                <button
+                  onClick={() => setShowTimerModal(false)}
+                  className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  ✕
+                </button>
+                
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="p-3 bg-blue-100 rounded-full">
+                    <Timer className="w-6 h-6 text-blue-600" />
+                  </div>
+                  <h3 className="text-2xl font-bold text-gray-800">Sleep Timer</h3>
+                </div>
+                
+                <p className="text-gray-600 mb-6">Audio will automatically stop after the selected time.</p>
+                
+                <div className="grid grid-cols-2 gap-3 mb-4">
+                  {[15, 30, 45, 60, 90, 120].map((minutes) => (
+                    <button
+                      key={minutes}
+                      onClick={() => startSleepTimer(minutes)}
+                      className="py-3 px-4 bg-gray-100 hover:bg-blue-500 hover:text-white rounded-xl transition-all font-medium text-gray-700"
+                    >
+                      {minutes < 60 ? `${minutes} min` : `${minutes / 60} hour${minutes > 60 ? 's' : ''}`}
+                    </button>
+                  ))}
+                </div>
+                
+                {!isPlaying && (
+                  <button
+                    onClick={() => {
+                      startSleepTimer(45); // Default 45 minutes for sleep
+                      setTimeout(() => handlePlayAllChapters(), 500);
+                    }}
+                    className="w-full py-3 mb-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-colors font-medium flex items-center justify-center gap-2"
+                  >
+                    <Play className="w-4 h-4" />
+                    Set Timer (45 min) & Play All
+                  </button>
+                )}
+                
+                <button
+                  onClick={() => setShowTimerModal(false)}
+                  className="w-full py-3 bg-gray-200 hover:bg-gray-300 rounded-xl transition-colors font-medium text-gray-700"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Sleep Timer Active Notice (when timer is set but no audio playing) */}
+          {sleepTimerEnd && !isPlaying && (
+            <div className="mb-6 p-4 bg-blue-50 border-l-4 border-blue-500 rounded-lg flex items-center gap-3">
+              <Timer className="w-5 h-5 text-blue-600 flex-shrink-0" />
+              <div className="flex-1">
+                <p className="font-medium text-blue-900">Sleep Timer Active</p>
+                <p className="text-sm text-blue-700">Click any chapter below or "Play All" button to start listening</p>
+              </div>
+              <button
+                onClick={handlePlayAllChapters}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+              >
+                Play All
+              </button>
+            </div>
+          )}
+          
           {/* Progress Summary */}
           {book && (() => {
             const bookProgress = getBookProgress(book.id);
@@ -925,10 +1342,10 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
           })()}
 
           {/* Reader Selection - Full Width */}
-          <div className="bg-white rounded-lg p-4 shadow-sm mb-6 border border-gray-200">
-            <div className="flex items-center gap-4">
-              <h3 className="text-lg font-semibold text-gray-900 whitespace-nowrap">Choose your favorite:</h3>
-              <div className="flex gap-3 flex-1">
+          <div className="bg-white rounded-lg p-3 sm:p-4 shadow-sm mb-6 border border-gray-200">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+              <h3 className="text-base sm:text-lg font-semibold text-gray-900 whitespace-nowrap">Choose your favorite:</h3>
+              <div className="flex gap-2 sm:gap-3 flex-1 min-w-0">
                 {readers.map((reader) => (
                   <button
                     key={reader.id}
@@ -937,20 +1354,29 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
                       // Track preset selection
                       trackPresetSelect(reader.id);
                     }}
-                    className={`p-2 rounded-lg border-2 transition-all flex-1 flex items-center gap-2 ${
+                    className={`p-2 rounded-lg border-2 transition-all flex-1 flex items-center justify-center gap-2 min-w-0 ${
                       selectedReader === reader.id
                         ? 'border-purple-500 bg-purple-50'
                         : 'border-gray-200 hover:border-gray-300'
                     }`}
                   >
-                    <div className="w-8 h-8 rounded-full overflow-hidden">
+                    <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full overflow-hidden flex-shrink-0 bg-gray-200 relative">
                       <img 
                         src={reader.avatar} 
                         alt={reader.name}
                         className="w-full h-full object-cover"
+                        style={{ display: 'block', minWidth: '100%', minHeight: '100%' }}
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          console.error(`Failed to load image: ${reader.avatar} for ${reader.name}`);
+                          target.src = '/presets/Preset3.jpg'; // Fallback to Aria image
+                        }}
+                        onLoad={() => {
+                          console.log(`Successfully loaded image: ${reader.avatar} for ${reader.name}`);
+                        }}
                       />
                     </div>
-                    <div className="text-sm font-medium text-gray-900">{reader.name}</div>
+                    <div className="text-xs sm:text-sm font-medium text-gray-900 truncate">{reader.name}</div>
                   </button>
                 ))}
               </div>
@@ -958,17 +1384,75 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
               </div>
 
           {/* Filter Results Count */}
-          <div className="mb-4 text-sm text-gray-600">
-            {(() => {
-              const filteredChapters = book.chapterList.filter((chapter) => {
-                if (chapterFilter === 'all') return true;
-                const trackingStatus = getCompletionStatus(book.id, chapter.id, selectedReader);
-                if (chapterFilter === 'completed') return trackingStatus.status === 'completed';
-                if (chapterFilter === 'in-progress') return trackingStatus.status === 'in-progress';
-                return true;
-              });
-              return `Showing ${filteredChapters.length} of ${book.chapterList.length} chapters`;
-            })()}
+          <div className="mb-4 flex items-center justify-between">
+            <span className="text-sm text-gray-600">
+              {(() => {
+                const filteredChapters = book.chapterList.filter((chapter) => {
+                  if (chapterFilter === 'all') return true;
+                  const trackingStatus = getCompletionStatus(book.id, chapter.id, selectedReader);
+                  if (chapterFilter === 'completed') return trackingStatus.status === 'completed';
+                  if (chapterFilter === 'in-progress') return trackingStatus.status === 'in-progress';
+                  return true;
+                });
+                return `Showing ${filteredChapters.length} of ${book.chapterList.length} chapters`;
+              })()}
+            </span>
+            
+            {/* Play All and Sleep Timer - grouped together on the right */}
+            <div className="flex items-center gap-1">
+              <button
+                onClick={handlePlayAllChapters}
+                disabled={isPlayingAll}
+                className="p-2 hover:bg-purple-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-purple-600 hover:text-purple-700 relative group"
+                title={isPlayingAll ? 'Playing all chapters...' : isProUser(user) ? 'Play all chapters' : 'Play all chapters (Pro feature)'}
+              >
+                <Play className="w-5 h-5" />
+                {!isProUser(user) && (
+                  <span className="absolute -top-1 -right-1 bg-gradient-to-r from-yellow-400 to-orange-500 text-white text-[8px] font-bold px-1 py-0.5 rounded">
+                    PRO
+                  </span>
+                )}
+              </button>
+              
+              {/* Sleep Timer Button - visible to all, Pro feature */}
+              <button
+                onClick={() => {
+                  if (!isProUser(user)) {
+                    handleUpgrade();
+                    return;
+                  }
+                  
+                  if (sleepTimerEnd) {
+                    cancelSleepTimer();
+                  } else {
+                    setShowTimerModal(true);
+                  }
+                }}
+                className={`p-2 hover:bg-blue-100 rounded-lg transition-colors relative group ${
+                  sleepTimerEnd ? 'bg-blue-100 text-blue-600' : 'text-gray-600 hover:text-blue-700'
+                }`}
+                title={sleepTimerEnd ? 'Click to cancel timer' : isProUser(user) ? 'Set sleep timer' : 'Set sleep timer (Pro feature)'}
+              >
+                <Timer className="w-5 h-5" />
+                {!isProUser(user) && (
+                  <span className="absolute -top-1 -right-1 bg-gradient-to-r from-yellow-400 to-orange-500 text-white text-[8px] font-bold px-1 py-0.5 rounded">
+                    PRO
+                  </span>
+                )}
+              </button>
+              {sleepTimerEnd && isProUser(user) && (() => {
+                const remainingMs = sleepTimerEnd - Date.now();
+                const remainingMinutes = Math.ceil(remainingMs / 60000);
+                const hours = Math.floor(remainingMinutes / 60);
+                const minutes = remainingMinutes % 60;
+                
+                return (
+                  <span className="text-sm font-medium text-blue-600 bg-blue-50 px-2 py-1 rounded ml-1">
+                    {hours > 0 ? `${hours}h ${minutes}m` : `${minutes} min`}
+                  </span>
+                );
+              })()}
+            </div>
           </div>
 
           {/* Chapter Cards - Full Width */}
@@ -1018,37 +1502,94 @@ export default function BibleStudyPage({ params }: BibleStudyPageProps) {
                             {exactDurations.get(`${book.id}-${chapter.id}`) || chapter.duration}
                           </span>
                         )}
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          (() => {
-                            const trackingStatus = getCompletionStatus(book.id, chapter.id, selectedReader);
-                            const hasAudio = hasAudioAvailable(book.id, chapter.id);
-                            const hasVerseAudio = hasVerseAudioAvailable(book.id, chapter.id);
-                            
-                            if (trackingStatus.status === 'completed') return 'bg-green-100 text-green-800';
-                            if (trackingStatus.status === 'in-progress') return 'bg-yellow-100 text-yellow-800';
-                            if (chapter.status === 'error') return 'bg-red-100 text-red-800';
-                            if (!hasAudio && !hasVerseAudio) return 'bg-gray-100 text-gray-600';
-                            if (!hasAudio && hasVerseAudio) return 'bg-purple-100 text-purple-800';
-                            return 'bg-blue-100 text-blue-800';
-                          })()
-                        }`}>
-                          {(() => {
-                            const trackingStatus = getCompletionStatus(book.id, chapter.id, selectedReader);
-                            const hasAudio = hasAudioAvailable(book.id, chapter.id);
-                            const hasVerseAudio = hasVerseAudioAvailable(book.id, chapter.id);
-                            
-                            if (trackingStatus.status === 'completed') return '✓ Completed';
-                            if (trackingStatus.status === 'in-progress') return '⏳ In Progress';
-                            if (chapter.status === 'error') return '✗ Error';
-                            if (!hasAudio && !hasVerseAudio) return '🔇 No Audio';
-                            if (!hasAudio && hasVerseAudio) return '🎵 Verse Audio';
-                            return 'Available';
-                          })()}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                            (() => {
+                              const trackingStatus = getCompletionStatus(book.id, chapter.id, selectedReader);
+                              const hasAudio = hasAudioAvailable(book.id, chapter.id);
+                              const hasVerseAudio = hasVerseAudioAvailable(book.id, chapter.id);
+                              
+                              if (trackingStatus.status === 'completed') return 'bg-green-100 text-green-800';
+                              if (trackingStatus.status === 'in-progress') return 'bg-yellow-100 text-yellow-800';
+                              if (chapter.status === 'error') return 'bg-red-100 text-red-800';
+                              if (!hasAudio && !hasVerseAudio) return 'bg-gray-100 text-gray-600';
+                              if (!hasAudio && hasVerseAudio) return 'bg-purple-100 text-purple-800';
+                              return 'bg-blue-100 text-blue-800';
+                            })()
+                          }`}>
+                            {(() => {
+                              const trackingStatus = getCompletionStatus(book.id, chapter.id, selectedReader);
+                              const hasAudio = hasAudioAvailable(book.id, chapter.id);
+                              const hasVerseAudio = hasVerseAudioAvailable(book.id, chapter.id);
+                              
+                              if (trackingStatus.status === 'completed') return '✓ Completed';
+                              if (trackingStatus.status === 'in-progress') return '⏳ In Progress';
+                              if (chapter.status === 'error') return '✗ Error';
+                              if (!hasAudio && !hasVerseAudio) return '🔇 No Audio';
+                              if (!hasAudio && hasVerseAudio) return '🎵 Verse Audio';
+                              return 'Available';
+                            })()}
+                          </span>
+                        </div>
                       </div>
                     </div>
                     </div>
                     <div className="flex items-center gap-2">
+                    {/* Download Button - visible to all, Pro feature */}
+                    <button
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        if (!book) return;
+                        
+                        // Check if user is Pro
+                        if (!isProUser(user)) {
+                          handleUpgrade();
+                          return;
+                        }
+                        
+                        try {
+                          const audioUrl = getAudioUrl(selectedReader, book.id, chapter.id, 'chapter');
+                          const fileName = `${book.title.replace(/\s+/g, '_')}_Chapter_${chapter.id}_${selectedReader}.mp3`;
+                          
+                          showInfo('Download Started', `Downloading ${book.title} Chapter ${chapter.id}...`);
+                          
+                          // Fetch the audio file
+                          const response = await fetch(audioUrl);
+                          if (!response.ok) throw new Error('Failed to fetch audio file');
+                          
+                          // Convert to blob
+                          const blob = await response.blob();
+                          
+                          // Create download link
+                          const url = window.URL.createObjectURL(blob);
+                          const a = document.createElement('a');
+                          a.href = url;
+                          a.download = fileName;
+                          document.body.appendChild(a);
+                          a.click();
+                          
+                          // Cleanup
+                          window.URL.revokeObjectURL(url);
+                          document.body.removeChild(a);
+                          
+                          showSuccess('Download Complete', `${book.title} Chapter ${chapter.id} downloaded to your Downloads folder!`);
+                        } catch (error) {
+                          console.error('Download error:', error);
+                          const errorMessage = error instanceof Error ? error.message : 'Failed to download chapter';
+                          showError('Download Failed', errorMessage);
+                        }
+                      }}
+                      className="w-8 h-8 bg-green-500 hover:bg-green-600 text-white rounded-full transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-110 flex items-center justify-center relative group"
+                      title={isProUser(user) ? 'Download chapter to your computer' : 'Download chapter (Pro feature)'}
+                    >
+                      <Download className="w-4 h-4" />
+                      {!isProUser(user) && (
+                        <span className="absolute -top-1 -right-1 bg-gradient-to-r from-yellow-400 to-orange-500 text-white text-[8px] font-bold px-1 rounded-full w-3 h-3 flex items-center justify-center">
+                          P
+                        </span>
+                      )}
+                    </button>
+                    
                     {/* Add Note Button */}
                     <button
                       onClick={(e) => {

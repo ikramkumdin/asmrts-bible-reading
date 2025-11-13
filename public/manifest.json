@@ -1,0 +1,43 @@
+{
+  "name": "WhisperWord - ASMR Bible Reader",
+  "short_name": "WhisperWord",
+  "description": "Experience the Bible through soothing ASMR audio. Relax, meditate and connect with scripture.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#9cb4a9",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["books", "education", "lifestyle"],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "Continue Reading",
+      "short_name": "Continue",
+      "description": "Continue your last reading",
+      "url": "/bible",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Audio Bible",
+      "short_name": "Audio",
+      "description": "Listen to ASMR Bible audio",
+      "url": "/bible",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}
+

@@ -11,6 +11,22 @@ const inter = Inter({ subsets: ["latin"] });
 export const metadata: Metadata = {
   title: "ASMR Audio Bible | Immersive & Relaxing Scripture Experience",
   description: "Experience the Bible like never before with our soothing ASMR Audio Bible. Relax, meditate and connect with scripture through immersive audio journeys. Perfect for stress relief, sleep, and spiritual growth.",
+  viewport: {
+    width: 'device-width',
+    initialScale: 1,
+    maximumScale: 5,
+    userScalable: true,
+  },
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#ffffff' },
+    { media: '(prefers-color-scheme: dark)', color: '#1a1a1a' },
+  ],
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'default',
+    title: 'WhisperWord',
+  },
+  manifest: '/manifest.json',
   keywords: "ASMR Bible, Audio Bible, Relaxing Bible, Soothing Scripture, Christian Meditation, Bible Audio, ASMR Scripture, Calming Bible, Bible Study, Spiritual Growth, Meditation, Sleep, Stress Relief, Christian Audio, Scripture Reading, Bible Listening, ASMR Christian, Relaxing Scripture, Bible Meditation, Christian ASMR, Bible Sleep, Bible Stress Relief",
   authors: [{ name: "ASMR Audio Bible Team" }],
   creator: "ASMR Audio Bible",
@@ -74,6 +90,13 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
+        {/* PWA Manifest */}
+        <link rel="manifest" href="/manifest.json" />
+        <meta name="theme-color" content="#9cb4a9" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+        <meta name="apple-mobile-web-app-title" content="WhisperWord" />
+        <meta name="mobile-web-app-capable" content="yes" />
         {/* Google Analytics 4 (via Firebase Analytics) */}
         {gaMeasurementId && gaMeasurementId.startsWith('G-') && (
           <>

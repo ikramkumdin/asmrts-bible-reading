@@ -127,11 +127,20 @@ export default function VoicesPage() {
           {voices.map((voice) => (
             <div key={voice.id} className="bg-white rounded-xl shadow-lg p-6 hover:shadow-xl transition-shadow duration-300">
               <div className="flex items-start gap-4 mb-6">
-                <div className="w-16 h-16 rounded-full overflow-hidden">
+                <div className="w-16 h-16 rounded-full overflow-hidden flex-shrink-0 bg-gray-200 relative">
                   <img 
                     src={voice.avatar} 
                     alt={voice.name}
                     className="w-full h-full object-cover"
+                    style={{ display: 'block', minWidth: '100%', minHeight: '100%' }}
+                    onError={(e) => {
+                      const target = e.target as HTMLImageElement;
+                      console.error(`Failed to load image: ${voice.avatar} for ${voice.name}`);
+                      target.src = '/presets/Preset3.jpg'; // Fallback to Aria image
+                    }}
+                    onLoad={() => {
+                      console.log(`Successfully loaded image: ${voice.avatar} for ${voice.name}`);
+                    }}
                   />
                 </div>
                 <div className="flex-1">

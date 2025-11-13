@@ -28,7 +28,7 @@ export default function UserProfile({ className = '' }: UserProfileProps) {
     <div className={`relative ${className}`}>
       <button
         onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-        className="flex items-center gap-2 p-2 rounded-lg hover:bg-gray-100 transition-colors"
+        className="flex items-center gap-2 p-1.5 sm:p-2 rounded-lg hover:bg-gray-100 transition-colors"
         disabled={loading}
       >
         {user.photoURL ? (
@@ -37,15 +37,15 @@ export default function UserProfile({ className = '' }: UserProfileProps) {
             alt={user.displayName || 'User'}
             width={32}
             height={32}
-            className="rounded-full"
+            className="rounded-full w-8 h-8 sm:w-8 sm:h-8"
           />
         ) : (
-          <div className="w-8 h-8 bg-purple-600 rounded-full flex items-center justify-center">
+          <div className="w-8 h-8 bg-purple-600 rounded-full flex items-center justify-center flex-shrink-0">
             <User className="w-4 h-4 text-white" />
           </div>
         )}
-        <div className="hidden md:block text-left">
-          <div className="text-sm font-medium text-gray-900">
+        <div className="hidden sm:block text-left">
+          <div className="text-xs sm:text-sm font-medium text-gray-900">
             {user.displayName || 'User'}
           </div>
           <div className="text-xs text-gray-500 flex items-center gap-1">
@@ -53,7 +53,7 @@ export default function UserProfile({ className = '' }: UserProfileProps) {
             {user.tokenCount} tokens
           </div>
         </div>
-        <ChevronDown className="w-4 h-4 text-gray-500" />
+        <ChevronDown className="w-4 h-4 text-gray-500 hidden sm:block" />
       </button>
 
       {isDropdownOpen && (

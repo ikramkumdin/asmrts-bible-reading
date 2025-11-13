@@ -1,6 +1,6 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signOut, User as FirebaseUser } from "firebase/auth";
-import { getFirestore, doc, setDoc, getDoc } from "firebase/firestore";
+import { getFirestore, doc, setDoc, getDoc, updateDoc } from "firebase/firestore";
 import { getAnalytics, logEvent, Analytics } from "firebase/analytics";
 
 // Custom User type for our application
@@ -10,6 +10,9 @@ export interface User {
   displayName: string | null;
   photoURL: string | null;
   tokenCount: number;
+  isPremium?: boolean; // Premium/Pro user status
+  isPro?: boolean; // Pro subscription status
+  proSubscriptionEnd?: string; // ISO date string of subscription end date
 }
 
 // Firebase configuration - reads from .env.local
@@ -163,6 +166,9 @@ export const signInWithGoogle = async (): Promise<{
         displayName: firebaseUser.displayName,
         photoURL: firebaseUser.photoURL,
         tokenCount: userTokens,
+        isPremium: false, // New users start as free
+        isPro: false,
+        proSubscriptionEnd: undefined,
       };
 
       await setDoc(userRef, {
@@ -178,18 +184,34 @@ export const signInWithGoogle = async (): Promise<{
       const existingData = userDoc.data();
       userTokens = existingData.tokenCount || 0;
       
+      // Debug: Log raw values
+      const rawIsPremium = existingData.isPremium;
+      const rawIsPro = existingData.isPro;
+      const rawProSubscriptionEnd = existingData.proSubscriptionEnd;
+      
+      // Explicit boolean checks - handle string "true" as well
+      let isPremium = rawIsPremium === true || rawIsPremium === "true";
+      let isPro = rawIsPro === true || rawIsPro === "true";
+      let proSubscriptionEnd = rawProSubscriptionEnd || undefined;
+      
       userData = {
         uid: firebaseUser.uid,
         email: firebaseUser.email,
         displayName: firebaseUser.displayName,
         photoURL: firebaseUser.photoURL,
         tokenCount: userTokens,
+        isPremium,
+        isPro,
+        proSubscriptionEnd,
       };
-
-      // Update last login time
-      await setDoc(userRef, {
+      
+      // Explicitly include Pro fields in the update to prevent them from being lost
+      await updateDoc(userRef, {
         lastLoginAt: new Date().toISOString(),
-      }, { merge: true });
+        isPremium: userData.isPremium || false,
+        isPro: userData.isPro || false,
+        ...(userData.proSubscriptionEnd && { proSubscriptionEnd: userData.proSubscriptionEnd }),
+      });
     }
 
     return { token, user: userData, userTokens };
@@ -240,6 +262,9 @@ export const handleRedirectResult = async (): Promise<{
         displayName: firebaseUser.displayName,
         photoURL: firebaseUser.photoURL,
         tokenCount: userTokens,
+        isPremium: false, // New users start as free
+        isPro: false,
+        proSubscriptionEnd: undefined,
       };
       
       await setDoc(userRef, {
@@ -253,12 +278,25 @@ export const handleRedirectResult = async (): Promise<{
       const existingData = userDoc.data();
       userTokens = existingData.tokenCount || 0;
       
+      // Debug: Log raw values
+      const rawIsPremium = existingData.isPremium;
+      const rawIsPro = existingData.isPro;
+      const rawProSubscriptionEnd = existingData.proSubscriptionEnd;
+      
+      // Explicit boolean checks - handle string "true" as well
+      let isPremium = rawIsPremium === true || rawIsPremium === "true";
+      let isPro = rawIsPro === true || rawIsPro === "true";
+      let proSubscriptionEnd = rawProSubscriptionEnd || undefined;
+      
       userData = {
         uid: firebaseUser.uid,
         email: firebaseUser.email,
         displayName: firebaseUser.displayName,
         photoURL: firebaseUser.photoURL,
         tokenCount: userTokens,
+        isPremium,
+        isPro,
+        proSubscriptionEnd,
       };
       
       await setDoc(userRef, {
@@ -297,10 +335,49 @@ export const convertFirebaseUser = async (firebaseUser: FirebaseUser): Promise<U
     throw new Error('Firebase not initialized');
   }
   
-  const userRef = doc(db, "users", firebaseUser.uid);
-  const userDoc = await getDoc(userRef);
+  // Try to find user by document ID (UID) first
+  // Use getDocFromServer to bypass cache and get latest data
+  let userRef = doc(db, "users", firebaseUser.uid);
   
-  const tokenCount = userDoc.exists() ? userDoc.data().tokenCount || 0 : 100;
+  
+  // Just use getDoc directly - getDocFromServer import might be failing
+  let userDoc = await getDoc(userRef);
+  
+  
+  // If document doesn't exist by UID, try to find by email
+  if (!userDoc.exists() && firebaseUser.email) {
+    const { collection, query, where, getDocs } = await import('firebase/firestore');
+    const usersRef = collection(db, "users");
+    const q = query(usersRef, where("email", "==", firebaseUser.email));
+    const emailSnapshot = await getDocs(q);
+    
+    if (!emailSnapshot.empty) {
+      // Use the first matching document (prefer one with matching UID)
+      let foundDoc = emailSnapshot.docs.find(d => d.data().uid === firebaseUser.uid) || emailSnapshot.docs[0];
+      userDoc = foundDoc;
+      
+      // If the document ID doesn't match UID, update it
+      if (foundDoc.id !== firebaseUser.uid) {
+        const { updateDoc, doc: docFn } = await import('firebase/firestore');
+        const foundRef = docFn(db, "users", foundDoc.id);
+        await updateDoc(foundRef, { uid: firebaseUser.uid });
+      }
+    }
+  }
+  
+  const userData = userDoc.exists() ? userDoc.data() : null;
+  const tokenCount = userData?.tokenCount || 100;
+  
+  // Debug: Log raw values before conversion
+  const rawIsPremium = userData?.isPremium;
+  const rawIsPro = userData?.isPro;
+  const rawProSubscriptionEnd = userData?.proSubscriptionEnd;
+  
+  // Explicit boolean checks - handle string "true" as well
+  let isPremium = rawIsPremium === true || rawIsPremium === "true";
+  let isPro = rawIsPro === true || rawIsPro === "true";
+  let proSubscriptionEnd = rawProSubscriptionEnd || undefined;
+  
   
   return {
     uid: firebaseUser.uid,
@@ -308,6 +385,9 @@ export const convertFirebaseUser = async (firebaseUser: FirebaseUser): Promise<U
     displayName: firebaseUser.displayName,
     photoURL: firebaseUser.photoURL,
     tokenCount,
+    isPremium,
+    isPro,
+    proSubscriptionEnd,
   };
 };
 

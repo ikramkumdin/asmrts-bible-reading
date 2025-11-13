@@ -51,6 +51,16 @@ export const isAudioAvailable = (preset: string, bookId: string, chapterId: numb
     return true;
   }
   
+  // 1 Peter chapters 1-5 are available for both presets
+  if (bookId === '1-peter' && chapterId >= 1 && chapterId <= 5) {
+    return true;
+  }
+  
+  // 2 Peter chapters 1-3 are available for both presets
+  if (bookId === '2-peter' && chapterId >= 1 && chapterId <= 3) {
+    return true;
+  }
+  
   // 1 John chapters 1-5 are available for both presets
   if (bookId === '1-john' && chapterId >= 1 && chapterId <= 5) {
     return true;
@@ -71,7 +81,7 @@ export const isAudioAvailable = (preset: string, bookId: string, chapterId: numb
     return true;
   }
   
-  // Other books/chapters: check based on file existence (currently only Genesis 1-50, Jude 1, 1 John 1-5, 2 John 1, 3 John 1, Revelation 1-12 available)
+  // Other books/chapters: check based on file existence (currently only Genesis 1-50, Jude 1, 1 Peter 1-5, 2 Peter 1-3, 1 John 1-5, 2 John 1, 3 John 1, Revelation 1-12 available)
   return false;
 };
 
@@ -90,6 +100,16 @@ export const isVerseAudioAvailable = (preset: string, bookId: string, chapterId:
   
   // Jude chapter 1 has verse-by-verse audio
   if (bookId === 'jude' && chapterId === 1) {
+    return true;
+  }
+  
+  // 1 Peter chapters 1-5 have verse-by-verse audio
+  if (bookId === '1-peter' && chapterId >= 1 && chapterId <= 5) {
+    return true;
+  }
+  
+  // 2 Peter chapters 1-3 have verse-by-verse audio
+  if (bookId === '2-peter' && chapterId >= 1 && chapterId <= 3) {
     return true;
   }
   

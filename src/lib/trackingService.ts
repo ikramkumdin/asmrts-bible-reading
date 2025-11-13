@@ -404,6 +404,16 @@ class TrackingService {
       console.log(`Audio check: ${bookId} Chapter ${chapterId} with ${preset} = Available`);
       return true;
     }
+    // 1 Peter chapters 1-5 are available for both presets
+    if (bookId === '1-peter' && chapterId >= 1 && chapterId <= 5) {
+      console.log(`Audio check: ${bookId} Chapter ${chapterId} with ${preset} = Available`);
+      return true;
+    }
+    // 2 Peter chapters 1-3 are available for both presets
+    if (bookId === '2-peter' && chapterId >= 1 && chapterId <= 3) {
+      console.log(`Audio check: ${bookId} Chapter ${chapterId} with ${preset} = Available`);
+      return true;
+    }
     // 1 John chapters 1-5 are available for both presets
     if (bookId === '1-john' && chapterId >= 1 && chapterId <= 5) {
       console.log(`Audio check: ${bookId} Chapter ${chapterId} with ${preset} = Available`);
