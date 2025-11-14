@@ -133,11 +133,8 @@ export async function POST(req: NextRequest) {
           refillMatch: receivedProductIdStr === refillIdStr || receivedVariantIdStr === refillIdStr,
         });
         
-        if (receivedProductIdStr === refillIdStr || receivedVariantIdStr === refillIdStr) {
-          // Refill logic: Add 100 credits
-          const currentTokens = userDoc.data().tokenCount || 0;
-          await updateDoc(userRef, { tokenCount: currentTokens + 100 });
-        } else if (
+        // Check Pro plan FIRST (higher priority)
+        if (
           receivedProductIdStr === proPlanIdStr || receivedVariantIdStr === proPlanIdStr
         ) {
           // Subscription logic: Activate pro plan for 1 year
@@ -151,6 +148,14 @@ export async function POST(req: NextRequest) {
           });
           
           console.log("✅ Pro plan activated successfully for user:", userId);
+        } else if (
+          receivedProductIdStr === refillIdStr || receivedVariantIdStr === refillIdStr
+        ) {
+          // Refill logic: Add 100 credits
+          const currentTokens = userDoc.data().tokenCount || 0;
+          await updateDoc(userRef, { tokenCount: currentTokens + 100 });
+          
+          console.log("✅ Refill processed: Added 100 tokens for user:", userId);
         } else {
           console.error("❌ No matching product ID found!", {
             receivedProductIdStr,
