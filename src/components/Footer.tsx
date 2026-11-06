@@ -3,7 +3,38 @@
 import { Sparkles, Heart, Mail, Twitter, Instagram, Facebook } from 'lucide-react';
 import Link from 'next/link';
 
+// Social URLs — set to real profiles when they exist. An empty string hides
+// the icon so we never ship a visible link that points to "#".
+const SOCIAL = {
+  twitter: process.env.NEXT_PUBLIC_SOCIAL_TWITTER ?? '',
+  instagram: process.env.NEXT_PUBLIC_SOCIAL_INSTAGRAM ?? '',
+  facebook: process.env.NEXT_PUBLIC_SOCIAL_FACEBOOK ?? '',
+};
+
+type SocialIconProps = {
+  href: string;
+  label: string;
+  Icon: typeof Twitter;
+};
+
+function SocialIcon({ href, label, Icon }: SocialIconProps) {
+  if (!href) return null;
+  return (
+    <a
+      href={href}
+      aria-label={label}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-gray-400 hover:text-white transition-colors"
+    >
+      <Icon className="w-5 h-5" />
+    </a>
+  );
+}
+
 export default function Footer() {
+  const year = new Date().getFullYear();
+
   return (
     <footer className="bg-gray-900 text-white">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
@@ -18,15 +49,9 @@ export default function Footer() {
               Experience the Bible through relaxing ASMR narration. Choose your favorite reader and immerse yourself in God&apos;s Word with soothing audio.
             </p>
             <div className="flex items-center gap-4">
-              <a href="#" className="text-gray-400 hover:text-white transition-colors">
-                <Twitter className="w-5 h-5" />
-              </a>
-              <a href="#" className="text-gray-400 hover:text-white transition-colors">
-                <Instagram className="w-5 h-5" />
-              </a>
-              <a href="#" className="text-gray-400 hover:text-white transition-colors">
-                <Facebook className="w-5 h-5" />
-              </a>
+              <SocialIcon href={SOCIAL.twitter} label="ASMR Bible on Twitter" Icon={Twitter} />
+              <SocialIcon href={SOCIAL.instagram} label="ASMR Bible on Instagram" Icon={Instagram} />
+              <SocialIcon href={SOCIAL.facebook} label="ASMR Bible on Facebook" Icon={Facebook} />
             </div>
           </div>
 
@@ -88,14 +113,14 @@ export default function Footer() {
         {/* Bottom Bar */}
         <div className="border-t border-gray-800 mt-8 pt-8 flex flex-col md:flex-row items-center justify-between">
           <p className="text-gray-400 text-sm">
-            © 2025 ASMR Bible. Made with <Heart className="w-4 h-4 inline text-red-500" /> for Christian community.
+            © {year} ASMR Bible. Made with <Heart className="w-4 h-4 inline text-red-500" aria-hidden="true" /> for Christian community.
           </p>
           <div className="flex items-center gap-2 mt-4 md:mt-0">
-            <Mail className="w-4 h-4 text-gray-400" />
+            <Mail className="w-4 h-4 text-gray-400" aria-hidden="true" />
             <span className="text-gray-400 text-sm">Subscribe to our newsletter</span>
           </div>
         </div>
       </div>
     </footer>
   );
-} 
+}
