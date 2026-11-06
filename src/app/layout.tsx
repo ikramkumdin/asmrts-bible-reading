@@ -97,6 +97,14 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
         <meta name="apple-mobile-web-app-title" content="WhisperWord" />
         <meta name="mobile-web-app-capable" content="yes" />
+        {/* Umami Analytics (self-hosted, Kurt team) */}
+        {process.env.NEXT_PUBLIC_UMAMI_WEBSITE_ID && (
+          <Script
+            strategy="afterInteractive"
+            src="https://stats.kina.men/script.js"
+            data-website-id={process.env.NEXT_PUBLIC_UMAMI_WEBSITE_ID}
+          />
+        )}
         {/* Google Analytics 4 (via Firebase Analytics) */}
         {gaMeasurementId && gaMeasurementId.startsWith('G-') && (
           <>
